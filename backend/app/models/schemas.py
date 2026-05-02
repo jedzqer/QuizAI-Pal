@@ -13,7 +13,7 @@ class UserResponse(BaseModel):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class QuestionResponse(BaseModel):
@@ -26,7 +26,7 @@ class QuestionResponse(BaseModel):
     tags: Optional[List[str]] = None
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class QuestionListResponse(BaseModel):
@@ -50,7 +50,7 @@ class AnswerResponse(BaseModel):
     answered_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
 class StatisticsResponse(BaseModel):
@@ -96,4 +96,4 @@ class WrongQuestionResponse(BaseModel):
     mastered: bool
 
     class Config:
-        from_attributes = True
+        orm_mode = True
