@@ -1,8 +1,86 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { questionsApi, answersApi, aiApi } from '../services/api';
 import type { Question, AnswerResponse } from '../types';
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  color: string;
+  size: number;
+  life: number;
+  gravity: number;
+}
+
+function ConfettiParticles({ trigger, isCorrect }: { trigger: number; isCorrect: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const particlesRef = useRef<Particle[]>([]);
+
+  const colors = isCorrect
+    ? ['#10B981', '#34D399', '#6EE7B7', '#F59E0B', '#FBBF24', '#FDE68A']
+    : ['#EF4444', '#F87171', '#FCA5A5'];
+
+  const createParticles = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const particles: Particle[] = [];
+    const count = isCorrect ? 60 : 30;
+    for (let i = 0; i < count; i++) {
+      particles.push({
+        x: canvas.width / 2 + (Math.random() - 0.5) * 200,
+        y: canvas.height * 0.3,
+        vx: (Math.random() - 0.5) * 12,
+        vy: -Math.random() * 10 - 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: Math.random() * 6 + 3,
+        life: 1,
+        gravity: 0.15 + Math.random() * 0.1,
+      });
+    }
+    particlesRef.current = particles;
+  }, [isCorrect]);
+
+  useEffect(() => {
+    if (trigger === 0) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const parent = canvas.parentElement!;
+    canvas.width = parent.offsetWidth;
+    canvas.height = parent.offsetHeight;
+
+    createParticles();
+    let animId: number;
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particlesRef.current = particlesRef.current.filter(p => {
+        p.x += p.vx;
+        p.vy += p.gravity;
+        p.y += p.vy;
+        p.life -= 0.015;
+        if (p.life <= 0) return false;
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size * 0.6);
+        return true;
+      });
+      ctx.globalAlpha = 1;
+      if (particlesRef.current.length > 0) {
+        animId = requestAnimationFrame(animate);
+      }
+    };
+    animate();
+    return () => cancelAnimationFrame(animId);
+  }, [trigger, createParticles]);
+
+  return <canvas ref={canvasRef} className="confetti-canvas" />;
+}
 
 interface DialogMessage {
   id: string;
@@ -49,6 +127,34 @@ function Quiz() {
   useEffect(() => {
     dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [dialogMessages, currentAiContent]);
+
+  // Trigger answer feedback animation
+  useEffect(() => {
+    if (!answerResult) return;
+    // Clear previous timeouts
+    animTimeoutRef.current.forEach(t => clearTimeout(t));
+    animTimeoutRef.current = [];
+
+    const isCorrect = answerResult.is_correct;
+    const shake = isCorrect ? 'shake-success' : 'shake-error';
+    const resultAnim = isCorrect ? 'pop-scale' : 'fade-slide-in';
+    const flash = isCorrect ? 'flash-success' : 'flash-error';
+
+    setShakeClass(shake);
+    setResultAnimClass(resultAnim);
+    setFlashType(flash);
+    if (isCorrect) {
+      setParticleTrigger(prev => prev + 1);
+    }
+
+    const t1 = setTimeout(() => setShakeClass(''), 600);
+    const t2 = setTimeout(() => setFlashType(null), 500);
+    animTimeoutRef.current = [t1, t2];
+
+    return () => {
+      animTimeoutRef.current.forEach(t => clearTimeout(t));
+    };
+  }, [answerResult]);
 
   const loadQuestion = async (id: number) => {
     setLoading(true);
@@ -198,19 +304,37 @@ function Quiz() {
     });
   };
 
+  const [shakeClass, setShakeClass] = useState<string>('');
+  const [resultAnimClass, setResultAnimClass] = useState<string>('');
+  const [flashType, setFlashType] = useState<'flash-success' | 'flash-error' | null>(null);
+  const [particleTrigger, setParticleTrigger] = useState(0);
+  const animTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const [slidePhase, setSlidePhase] = useState<'out-left' | 'out-right' | 'in-left' | 'in-right' | null>(null);
+
   const handleNext = () => {
     const nextNum = currentNum + 1;
-    setCurrentNum(nextNum);
-    navigate(`/quiz`);
-    loadQuestionByNum(nextNum);
+    setSlidePhase('out-left');
+    setTimeout(() => {
+      setCurrentNum(nextNum);
+      navigate(`/quiz`);
+      loadQuestionByNum(nextNum);
+      setSlidePhase('in-right');
+      setTimeout(() => setSlidePhase(null), 300);
+    }, 280);
   };
 
   const handlePrev = () => {
     if (currentNum > 1) {
       const prevNum = currentNum - 1;
-      setCurrentNum(prevNum);
-      navigate(`/quiz`);
-      loadQuestionByNum(prevNum);
+      setSlidePhase('out-right');
+      setTimeout(() => {
+        setCurrentNum(prevNum);
+        navigate(`/quiz`);
+        loadQuestionByNum(prevNum);
+        setSlidePhase('in-left');
+        setTimeout(() => setSlidePhase(null), 300);
+      }, 280);
     }
   };
 
@@ -228,7 +352,9 @@ function Quiz() {
   }
 
   return (
-    <div className="question-container">
+    <div className={`question-container ${slidePhase || ''} ${shakeClass}`}>
+      {flashType && <div className={`answer-flash-overlay ${flashType}`} />}
+      <ConfettiParticles trigger={particleTrigger} isCorrect={true} />
       {/* Question Header */}
       <div className="question-header">
         <span className="question-counter">题目 {currentNum}</span>
@@ -259,7 +385,7 @@ function Quiz() {
 
         {/* Answer Result */}
         {answerResult && (
-          <div className={`answer-result ${answerResult.is_correct ? 'correct' : 'wrong'}`}>
+          <div className={`answer-result ${answerResult.is_correct ? 'correct' : 'wrong'} ${resultAnimClass}`}>
             <div className="answer-result-text">
               {answerResult.is_correct ? (
                 '✓ 回答正确！'
@@ -279,8 +405,8 @@ function Quiz() {
             >
               请求AI解析
             </button>
-            <button 
-              className="btn btn-gold"
+            <button
+              className="btn"
               onClick={handleMarkConfusing}
               disabled={isMarkedConfusing || markLoading}
             >
