@@ -159,7 +159,8 @@ def start_lecture(request: AILectureRequest, db: Session = Depends(get_db)):
         questions_data.append({
             "question_text": q.question_text,
             "options": options,
-            "correct_answer": q.correct_answer
+            "correct_answer": q.correct_answer,
+            "user_answer": wq.user_answer
         })
     
     # Create session

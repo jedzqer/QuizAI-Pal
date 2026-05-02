@@ -57,10 +57,12 @@ def submit_answer(answer: AnswerSubmit, db: Session = Depends(get_db)):
             wrong_question.wrong_count += 1
             wrong_question.last_wrong_at = datetime.now()
             wrong_question.mastered = False
+            wrong_question.user_answer = answer.user_answer.upper()
         else:
             wrong_question = WrongQuestion(
                 user_id=DEFAULT_USER_ID,
                 question_id=answer.question_id,
+                user_answer=answer.user_answer.upper(),
                 wrong_count=1,
                 last_wrong_at=datetime.now()
             )

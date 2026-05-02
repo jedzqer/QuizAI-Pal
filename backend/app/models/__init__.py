@@ -51,6 +51,7 @@ class WrongQuestion(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     question_id = Column(Integer, ForeignKey("questions.id"))
+    user_answer = Column(String(1))
     wrong_count = Column(Integer, default=1)
     last_wrong_at = Column(TIMESTAMP)
     mastered = Column(Boolean, default=False)

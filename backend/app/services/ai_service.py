@@ -85,6 +85,7 @@ class AIService:
         """
         questions_text = "\n".join([
             f"题目{i+1}: {q['question_text']}\n选项: {json.dumps(q['options'], ensure_ascii=False)}\n正确答案: {q['correct_answer']}"
+            + (f"\n用户选择: {q['user_answer']}" if q.get('user_answer') else "")
             for i, q in enumerate(wrong_questions)
         ])
         

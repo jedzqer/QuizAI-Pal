@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.database import engine, Base
+from sqlalchemy import text
+from app.database import engine, SessionLocal, Base
 from app.routes import questions, answers, ai
 
 
@@ -10,6 +11,15 @@ from app.routes import questions, answers, ai
 async def lifespan(app: FastAPI):
     # Create database tables
     Base.metadata.create_all(bind=engine)
+    # Migrate: add user_answer column to wrong_questions if missing
+    try:
+        db = SessionLocal()
+        db.execute(text("ALTER TABLE wrong_questions ADD COLUMN user_answer VARCHAR(1)"))
+        db.commit()
+    except Exception:
+        pass  # Column already exists
+    finally:
+        db.close()
     yield
 
 
