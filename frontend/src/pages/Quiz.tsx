@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { questionsApi, answersApi, aiApi } from '../services/api';
 import type { Question, AnswerResponse, AIResponse } from '../types';
 
@@ -16,7 +17,10 @@ function Quiz() {
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
-  const [currentNum, setCurrentNum] = useState(1);
+  const [currentNum, setCurrentNum] = useState(() => {
+    const saved = localStorage.getItem('quiz_current_num');
+    return saved ? parseInt(saved) : 1;
+  });
 
   useEffect(() => {
     if (questionId) {
@@ -25,6 +29,10 @@ function Quiz() {
       loadQuestionByNum(currentNum);
     }
   }, [questionId]);
+
+  useEffect(() => {
+    localStorage.setItem('quiz_current_num', currentNum.toString());
+  }, [currentNum]);
 
   const loadQuestion = async (id: number) => {
     setLoading(true);
@@ -64,12 +72,13 @@ function Quiz() {
     }
   };
 
-  const handleAnswer = async () => {
-    if (!currentQuestion || !selectedAnswer) return;
+  const handleOptionClick = async (key: string) => {
+    if (!currentQuestion || answerResult || loading) return;
     
+    setSelectedAnswer(key);
     setLoading(true);
     try {
-      const response = await answersApi.submitAnswer(currentQuestion.id, selectedAnswer);
+      const response = await answersApi.submitAnswer(currentQuestion.id, key);
       setAnswerResult(response.data);
     } catch (error) {
       console.error('Failed to submit answer:', error);
@@ -156,14 +165,12 @@ function Quiz() {
             <button
               key={key}
               className={`option-btn ${
-                selectedAnswer === key ? 'selected' : ''
-              } ${
                 answerResult && key === answerResult.correct_answer ? 'correct' : ''
               } ${
                 answerResult && selectedAnswer === key && !answerResult.is_correct ? 'wrong' : ''
               }`}
-              onClick={() => !answerResult && setSelectedAnswer(key)}
-              disabled={!!answerResult}
+              onClick={() => handleOptionClick(key)}
+              disabled={!!answerResult || loading}
             >
               <strong>{key}.</strong> {value}
             </button>
@@ -171,26 +178,16 @@ function Quiz() {
         </div>
 
         {/* Action Buttons */}
-        <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
-          {!answerResult && (
-            <button 
-              className="btn btn-primary btn-lg" 
-              onClick={handleAnswer}
-              disabled={!selectedAnswer || loading}
-            >
-              {loading ? '提交中...' : '提交答案'}
-            </button>
-          )}
-          
-          {answerResult && !showExplanation && (
+        {answerResult && !showExplanation && (
+          <div style={{ marginTop: '24px' }}>
             <button 
               className="btn btn-primary" 
               onClick={handleExplain}
             >
               AI解析
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Answer Result */}
         {answerResult && (
@@ -221,7 +218,7 @@ function Quiz() {
             <div className="loading">AI思考中...</div>
           ) : (
             <>
-              <div className="ai-content">{aiExplanation?.content}</div>
+              <div className="ai-content"><ReactMarkdown>{aiExplanation?.content || ''}</ReactMarkdown></div>
               
               <div className="ai-input-group">
                 <input

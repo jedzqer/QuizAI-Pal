@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { questionsApi, aiApi } from '../services/api';
 import type { WrongQuestion, Question } from '../types';
 
@@ -156,7 +157,7 @@ function Lecture() {
       {lectureContent && (
         <div className="card">
           <div className="card-title">讲解内容</div>
-          <div className="lecture-content">{lectureContent}</div>
+          <div className="lecture-content"><ReactMarkdown>{lectureContent || ''}</ReactMarkdown></div>
           
           <div className="ai-input-group" style={{ marginTop: '24px' }}>
             <input

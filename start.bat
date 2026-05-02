@@ -41,7 +41,7 @@ echo [Start] Starting services...
 echo.
 
 REM Start backend (new window)
-start "Backend" cmd /k "cd backend && ..\backend\venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port %BACKEND_PORT% --reload"
+start "Backend" cmd /k "cd backend && ..\backend\venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port %BACKEND_PORT% --reload --reload-include .env"
 
 REM Start frontend (new window)
 start "Frontend" cmd /k "cd frontend && npm run dev -- --port %FRONTEND_PORT%"
