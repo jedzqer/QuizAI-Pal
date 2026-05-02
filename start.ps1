@@ -1,8 +1,10 @@
-﻿# 低压电工辅助学习系统启动脚本
-# 用于同时启动前端和后端，并显示日志
+﻿# 设置控制台编码为 UTF-8
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null
 
 Write-Host "=====================================" -ForegroundColor Cyan
-Write-Host "   AI 辅助学习系统启动脚本" -ForegroundColor Cyan
+Write-Host "           QuizAI-Pal  " -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host ""
 

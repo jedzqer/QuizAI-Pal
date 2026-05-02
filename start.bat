@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo =====================================
-echo    AI Helper Learning System
+echo             QuizAI-Pal
 echo =====================================
 echo.
 
