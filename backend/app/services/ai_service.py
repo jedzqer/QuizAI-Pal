@@ -1,7 +1,7 @@
 import os
 import json
 from openai import OpenAI
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Generator
 from dotenv import load_dotenv
 
 # Load .env from project root
@@ -24,9 +24,9 @@ class AIService:
         )
     
     def explain_answer(self, question: str, options: Dict[str, str], 
-                      correct_answer: str, user_answer: str) -> str:
+                      correct_answer: str, user_answer: str) -> Generator[str, None, None]:
         """
-        Generate explanation for a question answer.
+        Generate explanation for a question answer with streaming.
         """
         options_text = "\n".join([f"{k}. {v}" for k, v in options.items()])
         
@@ -46,17 +46,20 @@ class AIService:
 
 请用专业但易懂的语言回答。"""
         
-        response = self.client.chat.completions.create(
+        stream = self.client.chat.completions.create(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            stream=True
         )
         
-        return response.choices[0].message.content
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
     
     def answer_followup(self, conversation_history: List[Dict[str, str]], 
-                       user_question: str) -> str:
+                       user_question: str) -> Generator[str, None, None]:
         """
-        Answer follow-up questions about a question.
+        Answer follow-up questions about a question with streaming.
         """
         messages = conversation_history.copy()
         messages.append({"role": "user", "content": user_question})
@@ -66,16 +69,19 @@ class AIService:
             "content": f"{self.role}。请基于上下文回答用户的问题，用专业但易懂的语言回答。"
         }
         
-        response = self.client.chat.completions.create(
+        stream = self.client.chat.completions.create(
             model=self.model,
-            messages=[system_message] + messages
+            messages=[system_message] + messages,
+            stream=True
         )
         
-        return response.choices[0].message.content
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
     
-    def generate_lecture(self, wrong_questions: List[Dict[str, Any]]) -> str:
+    def generate_lecture(self, wrong_questions: List[Dict[str, Any]]) -> Generator[str, None, None]:
         """
-        Generate a lecture based on wrong questions.
+        Generate a lecture based on wrong questions with streaming.
         """
         questions_text = "\n".join([
             f"题目{i+1}: {q['question_text']}\n选项: {json.dumps(q['options'], ensure_ascii=False)}\n正确答案: {q['correct_answer']}"
@@ -95,12 +101,15 @@ class AIService:
 
 请用专业但易懂的语言讲解。"""
         
-        response = self.client.chat.completions.create(
+        stream = self.client.chat.completions.create(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            stream=True
         )
         
-        return response.choices[0].message.content
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
     
     def select_quiz_questions(self, knowledge_points: List[str], 
                             available_questions: List[Dict[str, Any]]) -> Dict[str, Any]:

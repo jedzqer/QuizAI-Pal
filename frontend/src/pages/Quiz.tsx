@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { questionsApi, answersApi, aiApi } from '../services/api';
-import type { Question, AnswerResponse, AIResponse } from '../types';
+import type { Question, AnswerResponse } from '../types';
 
 function Quiz() {
   const { questionId } = useParams();
@@ -12,11 +12,12 @@ function Quiz() {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerResult, setAnswerResult] = useState<AnswerResponse | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [aiExplanation, setAiExplanation] = useState<AIResponse | null>(null);
+  const [aiContent, setAiContent] = useState<string>('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [currentNum, setCurrentNum] = useState(() => {
     const saved = localStorage.getItem('quiz_current_num');
     return saved ? parseInt(saved) : 1;
@@ -39,7 +40,7 @@ function Quiz() {
     setSelectedAnswer(null);
     setAnswerResult(null);
     setShowExplanation(false);
-    setAiExplanation(null);
+    setAiContent('');
     setSessionId(null);
     
     try {
@@ -57,7 +58,7 @@ function Quiz() {
     setSelectedAnswer(null);
     setAnswerResult(null);
     setShowExplanation(false);
-    setAiExplanation(null);
+    setAiContent('');
     setSessionId(null);
     
     try {
@@ -91,35 +92,52 @@ function Quiz() {
     if (!currentQuestion || !selectedAnswer) return;
     
     setAiLoading(true);
+    setIsStreaming(true);
     setShowExplanation(true);
+    setAiContent('');
     
-    try {
-      const response = await aiApi.explainAnswer(currentQuestion.id, selectedAnswer);
-      setAiExplanation(response.data);
-      setSessionId(response.data.session_id || null);
-    } catch (error) {
-      console.error('Failed to get explanation:', error);
-    } finally {
-      setAiLoading(false);
-    }
+    await aiApi.explainAnswer(currentQuestion.id, selectedAnswer, {
+      onChunk: (content) => {
+        setAiContent(prev => prev + content);
+      },
+      onComplete: (sessionId) => {
+        setSessionId(sessionId);
+        setIsStreaming(false);
+        setAiLoading(false);
+      },
+      onError: (error) => {
+        console.error('Failed to get explanation:', error);
+        setIsStreaming(false);
+        setAiLoading(false);
+      }
+    });
   };
 
   const handleFollowUp = async () => {
     if (!currentQuestion || !sessionId || !followUpQuestion.trim()) return;
     
+    const question = followUpQuestion;
+    setFollowUpQuestion('');
     setAiLoading(true);
-    try {
-      const response = await aiApi.askQuestion(currentQuestion.id, sessionId, followUpQuestion);
-      setAiExplanation(prev => ({
-        content: (prev?.content || '') + '\n\n**追问：** ' + followUpQuestion + '\n\n**回答：** ' + response.data.content,
-        session_id: sessionId
-      }));
-      setFollowUpQuestion('');
-    } catch (error) {
-      console.error('Failed to ask question:', error);
-    } finally {
-      setAiLoading(false);
-    }
+    setIsStreaming(true);
+    
+    // Add user question to display
+    setAiContent(prev => prev + '\n\n**追问：** ' + question + '\n\n**回答：** ');
+    
+    await aiApi.askQuestion(currentQuestion.id, sessionId, question, {
+      onChunk: (content) => {
+        setAiContent(prev => prev + content);
+      },
+      onComplete: () => {
+        setIsStreaming(false);
+        setAiLoading(false);
+      },
+      onError: (error) => {
+        console.error('Failed to ask question:', error);
+        setIsStreaming(false);
+        setAiLoading(false);
+      }
+    });
   };
 
   const handleNext = () => {
@@ -213,12 +231,18 @@ function Quiz() {
       {/* AI Explanation */}
       {showExplanation && (
         <div className="card ai-section">
-          <div className="card-title">AI解析</div>
-          {aiLoading && !aiExplanation ? (
+          <div className="card-title">
+            AI解析
+            {isStreaming && <span className="streaming-indicator"> (输出中...)</span>}
+          </div>
+          {aiLoading && !aiContent ? (
             <div className="loading">AI思考中...</div>
           ) : (
             <>
-              <div className="ai-content"><ReactMarkdown>{aiExplanation?.content || ''}</ReactMarkdown></div>
+              <div className="ai-content">
+                <ReactMarkdown>{aiContent}</ReactMarkdown>
+                {isStreaming && <span className="cursor">▊</span>}
+              </div>
               
               <div className="ai-input-group">
                 <input
@@ -228,11 +252,12 @@ function Quiz() {
                   value={followUpQuestion}
                   onChange={(e) => setFollowUpQuestion(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleFollowUp()}
+                  disabled={isStreaming}
                 />
                 <button 
                   className="btn btn-primary"
                   onClick={handleFollowUp}
-                  disabled={!followUpQuestion.trim() || aiLoading}
+                  disabled={!followUpQuestion.trim() || aiLoading || isStreaming}
                 >
                   {aiLoading ? '思考中...' : '提问'}
                 </button>

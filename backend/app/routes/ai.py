@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import json
 import uuid
 
 from app.database import get_db
 from app.models import Question, WrongQuestion, AIConversation, User
-from app.models.schemas import AIExplainRequest, AIAskRequest, AILectureRequest, AIQuizRequest, AIResponse
+from app.models.schemas import AIExplainRequest, AIAskRequest, AILectureRequest, AIQuizRequest
 from app.services.ai_service import ai_service
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -25,9 +26,60 @@ def get_or_create_default_user(db: Session):
     return user
 
 
-@router.post("/explain", response_model=AIResponse)
+def stream_response(generator, session_id: str, db: Session, 
+                    user_id: int, question_id: int, user_content: str):
+    """Create SSE stream response and save to database after completion."""
+    full_content = []
+    
+    def event_stream():
+        for chunk in generator:
+            full_content.append(chunk)
+            data = json.dumps({"content": chunk, "done": False}, ensure_ascii=False)
+            yield f"data: {data}\n\n"
+        
+        # Stream completed, save to database
+        complete_content = "".join(full_content)
+        
+        # Save user message
+        user_msg = AIConversation(
+            user_id=user_id,
+            question_id=question_id,
+            session_id=session_id,
+            role="user",
+            content=user_content
+        )
+        db.add(user_msg)
+        
+        # Save assistant response
+        assistant_msg = AIConversation(
+            user_id=user_id,
+            question_id=question_id,
+            session_id=session_id,
+            role="assistant",
+            content=complete_content
+        )
+        db.add(assistant_msg)
+        
+        db.commit()
+        
+        # Send final done event with session_id
+        data = json.dumps({"content": "", "done": True, "session_id": session_id}, ensure_ascii=False)
+        yield f"data: {data}\n\n"
+    
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@router.post("/explain")
 def explain_answer(request: AIExplainRequest, db: Session = Depends(get_db)):
-    """Get AI explanation for a question answer."""
+    """Get AI explanation for a question answer with streaming."""
     get_or_create_default_user(db)
     
     # Get the question
@@ -37,45 +89,27 @@ def explain_answer(request: AIExplainRequest, db: Session = Depends(get_db)):
     
     options = json.loads(question.options) if question.options else {}
     
-    # Generate explanation
-    explanation = ai_service.explain_answer(
+    # Create session
+    session_id = str(uuid.uuid4())
+    
+    # Generate explanation stream
+    generator = ai_service.explain_answer(
         question.question_text,
         options,
         question.correct_answer,
         request.user_answer
     )
     
-    # Create session and save conversation
-    session_id = str(uuid.uuid4())
-    
-    # Save user message
-    user_msg = AIConversation(
-        user_id=DEFAULT_USER_ID,
-        question_id=request.question_id,
-        session_id=session_id,
-        role="user",
-        content=f"请解释题目：{question.question_text}"
+    return stream_response(
+        generator, session_id, db,
+        DEFAULT_USER_ID, request.question_id,
+        f"请解释题目：{question.question_text}"
     )
-    db.add(user_msg)
-    
-    # Save assistant response
-    assistant_msg = AIConversation(
-        user_id=DEFAULT_USER_ID,
-        question_id=request.question_id,
-        session_id=session_id,
-        role="assistant",
-        content=explanation
-    )
-    db.add(assistant_msg)
-    
-    db.commit()
-    
-    return AIResponse(content=explanation, session_id=session_id)
 
 
-@router.post("/ask", response_model=AIResponse)
+@router.post("/ask")
 def ask_question(request: AIAskRequest, db: Session = Depends(get_db)):
-    """Ask a follow-up question about a question."""
+    """Ask a follow-up question about a question with streaming."""
     get_or_create_default_user(db)
     
     # Get conversation history
@@ -89,37 +123,19 @@ def ask_question(request: AIAskRequest, db: Session = Depends(get_db)):
     for conv in conversations:
         history.append({"role": conv.role, "content": conv.content})
     
-    # Generate answer
-    answer = ai_service.answer_followup(history, request.question)
+    # Generate answer stream
+    generator = ai_service.answer_followup(history, request.question)
     
-    # Save user message
-    user_msg = AIConversation(
-        user_id=DEFAULT_USER_ID,
-        question_id=request.question_id,
-        session_id=request.session_id,
-        role="user",
-        content=request.question
+    return stream_response(
+        generator, request.session_id, db,
+        DEFAULT_USER_ID, request.question_id,
+        request.question
     )
-    db.add(user_msg)
-    
-    # Save assistant response
-    assistant_msg = AIConversation(
-        user_id=DEFAULT_USER_ID,
-        question_id=request.question_id,
-        session_id=request.session_id,
-        role="assistant",
-        content=answer
-    )
-    db.add(assistant_msg)
-    
-    db.commit()
-    
-    return AIResponse(content=answer, session_id=request.session_id)
 
 
-@router.post("/lecture", response_model=AIResponse)
+@router.post("/lecture")
 def start_lecture(request: AILectureRequest, db: Session = Depends(get_db)):
-    """Start an AI lecture based on wrong questions."""
+    """Start an AI lecture based on wrong questions with streaming."""
     get_or_create_default_user(db)
     
     # Get wrong questions
@@ -142,31 +158,17 @@ def start_lecture(request: AILectureRequest, db: Session = Depends(get_db)):
             "correct_answer": q.correct_answer
         })
     
-    # Generate lecture
-    lecture = ai_service.generate_lecture(questions_data)
-    
-    # Save conversation
+    # Create session
     session_id = str(uuid.uuid4())
     
-    user_msg = AIConversation(
-        user_id=DEFAULT_USER_ID,
-        session_id=session_id,
-        role="user",
-        content=f"请讲解以下错题：{len(questions_data)}道题"
+    # Generate lecture stream
+    generator = ai_service.generate_lecture(questions_data)
+    
+    return stream_response(
+        generator, session_id, db,
+        DEFAULT_USER_ID, 0,
+        f"请讲解以下错题：{len(questions_data)}道题"
     )
-    db.add(user_msg)
-    
-    assistant_msg = AIConversation(
-        user_id=DEFAULT_USER_ID,
-        session_id=session_id,
-        role="assistant",
-        content=lecture
-    )
-    db.add(assistant_msg)
-    
-    db.commit()
-    
-    return AIResponse(content=lecture, session_id=session_id)
 
 
 @router.post("/quiz")

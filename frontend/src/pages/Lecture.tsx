@@ -10,11 +10,12 @@ function Lecture() {
   
   const [wrongQuestions, setWrongQuestions] = useState<WrongQuestion[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>(wrongQuestionIds);
-  const [lectureContent, setLectureContent] = useState<string | null>(null);
+  const [lectureContent, setLectureContent] = useState<string>('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [lectureLoading, setLectureLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
 
   useEffect(() => {
@@ -48,34 +49,52 @@ function Lecture() {
     if (selectedIds.length === 0) return;
     
     setLectureLoading(true);
-    setLectureContent(null);
+    setIsStreaming(true);
+    setLectureContent('');
     setQuizQuestions([]);
     
-    try {
-      const response = await aiApi.startLecture(selectedIds);
-      setLectureContent(response.data.content);
-      setSessionId(response.data.session_id || null);
-    } catch (error) {
-      console.error('Failed to start lecture:', error);
-    } finally {
-      setLectureLoading(false);
-    }
+    await aiApi.startLecture(selectedIds, {
+      onChunk: (content) => {
+        setLectureContent(prev => prev + content);
+      },
+      onComplete: (sessionId) => {
+        setSessionId(sessionId);
+        setIsStreaming(false);
+        setLectureLoading(false);
+      },
+      onError: (error) => {
+        console.error('Failed to start lecture:', error);
+        setIsStreaming(false);
+        setLectureLoading(false);
+      }
+    });
   };
 
   const handleFollowUp = async () => {
     if (!sessionId || !followUpQuestion.trim()) return;
     
+    const question = followUpQuestion;
+    setFollowUpQuestion('');
     setLectureLoading(true);
-    try {
-      // We need a question ID for the API, but for lecture we can use 0
-      const response = await aiApi.askQuestion(0, sessionId, followUpQuestion);
-      setLectureContent(prev => (prev || '') + '\n\n**追问：** ' + followUpQuestion + '\n\n**回答：** ' + response.data.content);
-      setFollowUpQuestion('');
-    } catch (error) {
-      console.error('Failed to ask question:', error);
-    } finally {
-      setLectureLoading(false);
-    }
+    setIsStreaming(true);
+    
+    // Add user question to display
+    setLectureContent(prev => prev + '\n\n**追问：** ' + question + '\n\n**回答：** ');
+    
+    await aiApi.askQuestion(0, sessionId, question, {
+      onChunk: (content) => {
+        setLectureContent(prev => prev + content);
+      },
+      onComplete: () => {
+        setIsStreaming(false);
+        setLectureLoading(false);
+      },
+      onError: (error) => {
+        console.error('Failed to ask question:', error);
+        setIsStreaming(false);
+        setLectureLoading(false);
+      }
+    });
   };
 
   const handleGenerateQuiz = async () => {
@@ -156,8 +175,14 @@ function Lecture() {
       {/* Lecture Content */}
       {lectureContent && (
         <div className="card">
-          <div className="card-title">讲解内容</div>
-          <div className="lecture-content"><ReactMarkdown>{lectureContent || ''}</ReactMarkdown></div>
+          <div className="card-title">
+            讲解内容
+            {isStreaming && <span className="streaming-indicator"> (输出中...)</span>}
+          </div>
+          <div className="lecture-content">
+            <ReactMarkdown>{lectureContent}</ReactMarkdown>
+            {isStreaming && <span className="cursor">▊</span>}
+          </div>
           
           <div className="ai-input-group" style={{ marginTop: '24px' }}>
             <input
@@ -167,11 +192,12 @@ function Lecture() {
               value={followUpQuestion}
               onChange={(e) => setFollowUpQuestion(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleFollowUp()}
+              disabled={isStreaming}
             />
             <button 
               className="btn btn-primary"
               onClick={handleFollowUp}
-              disabled={!followUpQuestion.trim() || lectureLoading}
+              disabled={!followUpQuestion.trim() || lectureLoading || isStreaming}
             >
               {lectureLoading ? '思考中...' : '提问'}
             </button>
@@ -181,7 +207,7 @@ function Lecture() {
             className="btn btn-success" 
             style={{ marginTop: '16px' }}
             onClick={handleGenerateQuiz}
-            disabled={loading}
+            disabled={loading || isStreaming}
           >
             {loading ? '生成中...' : '生成测试题'}
           </button>

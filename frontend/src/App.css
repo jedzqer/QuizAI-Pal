@@ -430,3 +430,41 @@ body {
   overflow-x: auto;
   margin-top: 8px;
 }
+
+/* Streaming Output */
+.streaming-indicator {
+  font-size: 14px;
+  color: var(--primary-color);
+  font-weight: normal;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.cursor {
+  display: inline-block;
+  color: var(--primary-color);
+  font-weight: bold;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+.ai-content p:last-child,
+.lecture-content p:last-child {
+  display: inline;
+}
