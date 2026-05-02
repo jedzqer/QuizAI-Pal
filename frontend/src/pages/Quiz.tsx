@@ -1,18 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { questionsApi, answersApi, aiApi } from '../services/api';
 import type { Question, AnswerResponse } from '../types';
 
+interface DialogMessage {
+  id: string;
+  role: 'ai' | 'user';
+  content: string;
+  timestamp: Date;
+}
+
 function Quiz() {
   const { questionId } = useParams();
   const navigate = useNavigate();
+  const dialogEndRef = useRef<HTMLDivElement>(null);
   
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [answerResult, setAnswerResult] = useState<AnswerResponse | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [aiContent, setAiContent] = useState<string>('');
+  const [dialogMessages, setDialogMessages] = useState<DialogMessage[]>([]);
+  const [currentAiContent, setCurrentAiContent] = useState<string>('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,12 +46,17 @@ function Quiz() {
     localStorage.setItem('quiz_current_num', currentNum.toString());
   }, [currentNum]);
 
+  useEffect(() => {
+    dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [dialogMessages, currentAiContent]);
+
   const loadQuestion = async (id: number) => {
     setLoading(true);
     setSelectedAnswer(null);
     setAnswerResult(null);
     setShowExplanation(false);
-    setAiContent('');
+    setDialogMessages([]);
+    setCurrentAiContent('');
     setSessionId(null);
     setIsMarkedConfusing(false);
     setMarkLoading(false);
@@ -62,7 +76,8 @@ function Quiz() {
     setSelectedAnswer(null);
     setAnswerResult(null);
     setShowExplanation(false);
-    setAiContent('');
+    setDialogMessages([]);
+    setCurrentAiContent('');
     setSessionId(null);
     setIsMarkedConfusing(false);
     setMarkLoading(false);
@@ -100,16 +115,24 @@ function Quiz() {
     setAiLoading(true);
     setIsStreaming(true);
     setShowExplanation(true);
-    setAiContent('');
+    setCurrentAiContent('');
     
     await aiApi.explainAnswer(currentQuestion.id, selectedAnswer, {
       onChunk: (content) => {
-        setAiContent(prev => prev + content);
+        setCurrentAiContent(prev => prev + content);
       },
-      onComplete: (sessionId) => {
-        setSessionId(sessionId);
+      onComplete: (newSessionId) => {
+        setSessionId(newSessionId);
         setIsStreaming(false);
         setAiLoading(false);
+        // Add completed AI message to dialog
+        setDialogMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'ai',
+          content: currentAiContent,
+          timestamp: new Date()
+        }]);
+        setCurrentAiContent('');
       },
       onError: (error) => {
         console.error('Failed to get explanation:', error);
@@ -138,19 +161,34 @@ function Quiz() {
     
     const question = followUpQuestion;
     setFollowUpQuestion('');
+    
+    // Add user message to dialog
+    setDialogMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      role: 'user',
+      content: question,
+      timestamp: new Date()
+    }]);
+    
     setAiLoading(true);
     setIsStreaming(true);
-    
-    // Add user question to display
-    setAiContent(prev => prev + '\n\n**追问：** ' + question + '\n\n**回答：** ');
+    setCurrentAiContent('');
     
     await aiApi.askQuestion(currentQuestion.id, sessionId, question, {
       onChunk: (content) => {
-        setAiContent(prev => prev + content);
+        setCurrentAiContent(prev => prev + content);
       },
       onComplete: () => {
         setIsStreaming(false);
         setAiLoading(false);
+        // Add completed AI response to dialog
+        setDialogMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          role: 'ai',
+          content: currentAiContent,
+          timestamp: new Date()
+        }]);
+        setCurrentAiContent('');
       },
       onError: (error) => {
         console.error('Failed to ask question:', error);
@@ -177,24 +215,27 @@ function Quiz() {
   };
 
   if (loading && !currentQuestion) {
-    return <div className="loading">加载中...</div>;
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <div>正在加载题目...</div>
+      </div>
+    );
   }
 
   if (!currentQuestion) {
-    return <div className="loading">没有题目</div>;
+    return <div className="loading">暂无题目</div>;
   }
 
   return (
     <div className="question-container">
-      {/* Progress */}
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-          <span>题目 {currentNum}</span>
-          <span>题号: {currentQuestion.num}</span>
-        </div>
+      {/* Question Header */}
+      <div className="question-header">
+        <span className="question-counter">题目 {currentNum}</span>
+        <span className="question-num">编号 {currentQuestion.num}</span>
       </div>
 
-      {/* Question */}
+      {/* Question Card */}
       <div className="card">
         <div className="question-text">{currentQuestion.question_text}</div>
         
@@ -206,91 +247,131 @@ function Quiz() {
                 answerResult && key === answerResult.correct_answer ? 'correct' : ''
               } ${
                 answerResult && selectedAnswer === key && !answerResult.is_correct ? 'wrong' : ''
-              }`}
+              } ${selectedAnswer === key && !answerResult ? 'selected' : ''}`}
               onClick={() => handleOptionClick(key)}
               disabled={!!answerResult || loading}
             >
-              <strong>{key}.</strong> {value}
+              <span className="option-key">{key}.</span>
+              <span>{value}</span>
             </button>
           ))}
         </div>
 
+        {/* Answer Result */}
+        {answerResult && (
+          <div className={`answer-result ${answerResult.is_correct ? 'correct' : 'wrong'}`}>
+            <div className="answer-result-text">
+              {answerResult.is_correct ? (
+                '✓ 回答正确！'
+              ) : (
+                `✗ 回答错误！正确答案是：${answerResult.correct_answer}`
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Action Buttons */}
         {answerResult && !showExplanation && (
-          <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
+          <div className="action-buttons">
             <button 
               className="btn btn-primary" 
               onClick={handleExplain}
             >
-              AI解析
+              请求AI解析
             </button>
             <button 
-              className="btn btn-warning"
+              className="btn btn-gold"
               onClick={handleMarkConfusing}
               disabled={isMarkedConfusing || markLoading}
             >
-              {isMarkedConfusing ? '已加入错题本' : (markLoading ? '加入中...' : '不懂')}
+              {isMarkedConfusing ? '已加入错题本' : (markLoading ? '加入中...' : '标记为不懂')}
             </button>
-          </div>
-        )}
-
-        {/* Answer Result */}
-        {answerResult && (
-          <div style={{ 
-            marginTop: '16px', 
-            padding: '16px', 
-            backgroundColor: answerResult.is_correct ? '#f6ffed' : '#fff2f0',
-            borderRadius: '8px'
-          }}>
-            {answerResult.is_correct ? (
-              <div style={{ color: 'var(--success-color)', fontWeight: 'bold' }}>
-                ✓ 回答正确！
-              </div>
-            ) : (
-              <div style={{ color: 'var(--error-color)' }}>
-                ✗ 回答错误！正确答案是：{answerResult.correct_answer}
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {/* AI Explanation */}
+      {/* AI Conversation Section */}
       {showExplanation && (
-        <div className="card ai-section">
-          <div className="card-title">
-            AI解析
-            {isStreaming && <span className="streaming-indicator"> (输出中...)</span>}
+        <div className="conversation-section">
+          <div className="conversation-header">
+            <span className="icon">◆</span>
+            <span>AI 解析与对话</span>
+            {isStreaming && <span className="conversation-streaming">正在输出...</span>}
           </div>
-          {aiLoading && !aiContent ? (
-            <div className="loading">AI思考中...</div>
-          ) : (
-            <>
-              <div className="ai-content">
-                <ReactMarkdown>{aiContent}</ReactMarkdown>
-                {isStreaming && <span className="cursor">▊</span>}
+          
+          <div className="dialog-cards">
+            {/* Historical Messages */}
+            {dialogMessages.map((msg) => (
+              <div key={msg.id} className={`dialog-card dialog-card-${msg.role}`}>
+                <div className="dialog-card-header">
+                  <span className="dialog-role">
+                    {msg.role === 'ai' ? 'AI 助手' : '你的追问'}
+                  </span>
+                  <span className="dialog-timestamp">
+                    {msg.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="dialog-card-body">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
               </div>
-              
-              <div className="ai-input-group">
-                <input
-                  type="text"
-                  className="ai-input"
-                  placeholder="继续提问..."
-                  value={followUpQuestion}
-                  onChange={(e) => setFollowUpQuestion(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleFollowUp()}
-                  disabled={isStreaming}
-                />
-                <button 
-                  className="btn btn-primary"
-                  onClick={handleFollowUp}
-                  disabled={!followUpQuestion.trim() || aiLoading || isStreaming}
-                >
-                  {aiLoading ? '思考中...' : '提问'}
-                </button>
+            ))}
+            
+            {/* Current Streaming AI Response */}
+            {isStreaming && currentAiContent && (
+              <div className="dialog-card dialog-card-ai">
+                <div className="dialog-card-header">
+                  <span className="dialog-role">AI 助手</span>
+                  <span className="dialog-timestamp">正在生成...</span>
+                </div>
+                <div className="dialog-card-body">
+                  <ReactMarkdown>{currentAiContent}</ReactMarkdown>
+                  <span className="streaming-cursor"></span>
+                </div>
               </div>
-            </>
-          )}
+            )}
+            
+            {/* AI Thinking State */}
+            {aiLoading && !currentAiContent && (
+              <div className="dialog-card dialog-card-ai">
+                <div className="dialog-card-header">
+                  <span className="dialog-role">AI 助手</span>
+                </div>
+                <div className="ai-thinking">
+                  正在思考中
+                  <span className="ai-thinking-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            <div ref={dialogEndRef} />
+          </div>
+          
+          {/* Follow-up Input */}
+          <div className="follow-up-section">
+            <div className="follow-up-input-group">
+              <input
+                type="text"
+                className="follow-up-input"
+                placeholder="输入你的追问..."
+                value={followUpQuestion}
+                onChange={(e) => setFollowUpQuestion(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleFollowUp()}
+                disabled={isStreaming}
+              />
+              <button 
+                className="btn btn-primary"
+                onClick={handleFollowUp}
+                disabled={!followUpQuestion.trim() || aiLoading || isStreaming}
+              >
+                {aiLoading ? '思考中...' : '发送追问'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -301,13 +382,13 @@ function Quiz() {
           onClick={handlePrev}
           disabled={currentNum <= 1}
         >
-          上一题
+          ← 上一题
         </button>
         <button 
           className="btn btn-primary" 
           onClick={handleNext}
         >
-          下一题
+          下一题 →
         </button>
       </div>
     </div>

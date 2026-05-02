@@ -41,28 +41,47 @@ function WrongQuestions() {
   };
 
   if (loading) {
-    return <div className="loading">加载中...</div>;
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <div>正在加载错题...</div>
+      </div>
+    );
   }
 
   return (
     <div>
-      <h1 style={{ marginBottom: '24px' }}>错题本</h1>
+      <header style={{ marginBottom: '40px' }}>
+        <h1>错题本</h1>
+        <p className="subtitle">回顾薄弱知识点，巩固学习成果</p>
+      </header>
       
       {wrongQuestions.length === 0 ? (
-        <div className="card">
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-            暂无错题，继续加油！
-          </div>
+        <div className="card" style={{ textAlign: 'center', padding: '80px 32px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '24px' }}>✦</div>
+          <h3 style={{ marginBottom: '12px' }}>暂无错题</h3>
+          <p style={{ color: 'var(--color-muted)', fontStyle: 'italic' }}>
+            继续保持，你的学习表现很好！
+          </p>
         </div>
       ) : (
         <>
+          {/* Control Bar */}
           <div className="card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div>
-                <span>共 {wrongQuestions.length} 道错题</span>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center' 
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <span style={{ 
+                  fontFamily: 'var(--font-display)', 
+                  fontWeight: '600' 
+                }}>
+                  共 {wrongQuestions.length} 道错题
+                </span>
                 <button 
-                  className="btn" 
-                  style={{ marginLeft: '16px' }}
+                  className="btn btn-sm" 
                   onClick={handleSelectAll}
                 >
                   {selectedIds.length === wrongQuestions.length ? '取消全选' : '全选'}
@@ -71,7 +90,7 @@ function WrongQuestions() {
               {selectedIds.length > 0 && (
                 <Link 
                   to="/lecture" 
-                  className="btn btn-primary"
+                  className="btn btn-primary btn-sm"
                   state={{ wrongQuestionIds: selectedIds }}
                 >
                   AI讲解选中题目 ({selectedIds.length})
@@ -80,39 +99,61 @@ function WrongQuestions() {
             </div>
           </div>
 
-          {wrongQuestions.map((wq) => (
-            <div key={wq.id} className="wrong-question-item">
-              <div className="checkbox-item">
+          {/* Wrong Questions List */}
+          {wrongQuestions.map((wq, index) => (
+            <div 
+              key={wq.id} 
+              className="wrong-question-item"
+              style={{ animationDelay: `${index * 0.05}s` }}
+            >
+              <label className="custom-checkbox">
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(wq.id)}
                   onChange={() => handleSelect(wq.id)}
                 />
-              </div>
+                <span className="checkbox-visual"></span>
+              </label>
               <div className="wrong-question-info">
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>题号 {wq.question.num}:</strong> {wq.question.question_text}
+                <div className="wrong-question-text">
+                  <strong style={{ color: 'var(--color-burgundy)' }}>
+                    题号 {wq.question.num}
+                  </strong>
+                  {' · '}
+                  {wq.question.question_text}
                 </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>
+                <div style={{ 
+                  fontSize: '0.875rem', 
+                  color: 'var(--color-muted)',
+                  marginBottom: '8px'
+                }}>
                   {Object.entries(wq.question.options).map(([key, value]) => (
                     <span key={key} style={{ marginRight: '16px' }}>
                       {key}. {value}
                     </span>
                   ))}
                 </div>
-                <div style={{ marginTop: '8px' }}>
-                  <span className="wrong-count">错误次数: {wq.wrong_count}</span>
-                  <span style={{ marginLeft: '16px', color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
+                  <span className="wrong-count">
+                    错误 {wq.wrong_count} 次
+                  </span>
+                  <span style={{ 
+                    fontSize: '0.875rem', 
+                    color: 'var(--color-emerald)',
+                    fontWeight: '600'
+                  }}>
                     正确答案: {wq.question.correct_answer}
                   </span>
                 </div>
               </div>
-              <Link 
-                to={`/quiz/${wq.question.id}`} 
-                className="btn btn-primary"
-              >
-                重做
-              </Link>
+              <div className="wrong-question-actions">
+                <Link 
+                  to={`/quiz/${wq.question.id}`} 
+                  className="btn btn-primary btn-sm"
+                >
+                  重做此题
+                </Link>
+              </div>
             </div>
           ))}
         </>

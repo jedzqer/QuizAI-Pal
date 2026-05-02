@@ -23,16 +23,24 @@ function Home() {
   };
 
   if (loading) {
-    return <div className="loading">加载中...</div>;
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <div>正在加载数据...</div>
+      </div>
+    );
   }
 
   return (
     <div>
-      <h1 style={{ marginBottom: '24px' }}>AI刷题助手</h1>
+      <header style={{ marginBottom: '48px' }}>
+        <h1>AI刷题助手</h1>
+        <p className="subtitle">智能学习，高效备考</p>
+      </header>
       
       {/* Statistics */}
       {stats && (
-        <div className="stats-grid">
+        <section className="stats-grid">
           <div className="stat-card">
             <div className="stat-value">{stats.total_questions}</div>
             <div className="stat-label">题库总数</div>
@@ -47,23 +55,28 @@ function Home() {
           </div>
           <div className="stat-card">
             <div className="stat-value">{stats.wrong_questions_count}</div>
-            <div className="stat-label">待巩固题目</div>
+            <div className="stat-label">待巩固</div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Progress Bar */}
       {stats && (
-        <div className="card" style={{ marginTop: '24px' }}>
+        <div className="card">
           <div className="card-title">学习进度</div>
-          <div className="progress-bar">
-            <div 
-              className="progress-fill" 
-              style={{ width: `${(stats.answered_questions / stats.total_questions) * 100}%` }}
-            />
-          </div>
-          <div style={{ textAlign: 'center', marginTop: '8px', color: 'var(--text-secondary)' }}>
-            已完成 {stats.answered_questions} / {stats.total_questions} 题
+          <div className="progress-container">
+            <div className="progress-header">
+              <span className="progress-label">完成度</span>
+              <span className="progress-value">
+                {stats.answered_questions} / {stats.total_questions} 题
+              </span>
+            </div>
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${(stats.answered_questions / stats.total_questions) * 100}%` }}
+              />
+            </div>
           </div>
         </div>
       )}
@@ -73,15 +86,15 @@ function Home() {
         <div className="card-title">快捷入口</div>
         <div className="quick-actions">
           <Link to="/quiz" className="quick-action-card">
-            <div className="quick-action-icon">📝</div>
+            <span className="quick-action-icon">✦</span>
             <div className="quick-action-title">开始刷题</div>
           </Link>
           <Link to="/wrong" className="quick-action-card">
-            <div className="quick-action-icon">❌</div>
+            <span className="quick-action-icon">✦</span>
             <div className="quick-action-title">错题本</div>
           </Link>
           <Link to="/lecture" className="quick-action-card">
-            <div className="quick-action-icon">🎓</div>
+            <span className="quick-action-icon">✦</span>
             <div className="quick-action-title">AI讲解</div>
           </Link>
         </div>

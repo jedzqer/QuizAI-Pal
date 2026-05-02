@@ -1,26 +1,40 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { questionsApi, aiApi } from '../services/api';
 import type { WrongQuestion, Question } from '../types';
 
+interface DialogMessage {
+  id: string;
+  role: 'ai' | 'user';
+  content: string;
+  timestamp: Date;
+}
+
 function Lecture() {
   const location = useLocation();
   const wrongQuestionIds = location.state?.wrongQuestionIds || [];
+  const dialogEndRef = useRef<HTMLDivElement>(null);
   
   const [wrongQuestions, setWrongQuestions] = useState<WrongQuestion[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>(wrongQuestionIds);
-  const [lectureContent, setLectureContent] = useState<string>('');
+  const [dialogMessages, setDialogMessages] = useState<DialogMessage[]>([]);
+  const [currentAiContent, setCurrentAiContent] = useState<string>('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [lectureLoading, setLectureLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
+  const [lectureStarted, setLectureStarted] = useState(false);
 
   useEffect(() => {
     loadWrongQuestions();
   }, []);
+
+  useEffect(() => {
+    dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [dialogMessages, currentAiContent]);
 
   const loadWrongQuestions = async () => {
     setLoading(true);
@@ -50,17 +64,26 @@ function Lecture() {
     
     setLectureLoading(true);
     setIsStreaming(true);
-    setLectureContent('');
+    setLectureStarted(true);
+    setCurrentAiContent('');
+    setDialogMessages([]);
     setQuizQuestions([]);
     
     await aiApi.startLecture(selectedIds, {
       onChunk: (content) => {
-        setLectureContent(prev => prev + content);
+        setCurrentAiContent(prev => prev + content);
       },
-      onComplete: (sessionId) => {
-        setSessionId(sessionId);
+      onComplete: (newSessionId) => {
+        setSessionId(newSessionId);
         setIsStreaming(false);
         setLectureLoading(false);
+        setDialogMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          role: 'ai',
+          content: currentAiContent,
+          timestamp: new Date()
+        }]);
+        setCurrentAiContent('');
       },
       onError: (error) => {
         console.error('Failed to start lecture:', error);
@@ -75,19 +98,32 @@ function Lecture() {
     
     const question = followUpQuestion;
     setFollowUpQuestion('');
+    
+    setDialogMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      role: 'user',
+      content: question,
+      timestamp: new Date()
+    }]);
+    
     setLectureLoading(true);
     setIsStreaming(true);
-    
-    // Add user question to display
-    setLectureContent(prev => prev + '\n\n**追问：** ' + question + '\n\n**回答：** ');
+    setCurrentAiContent('');
     
     await aiApi.askQuestion(0, sessionId, question, {
       onChunk: (content) => {
-        setLectureContent(prev => prev + content);
+        setCurrentAiContent(prev => prev + content);
       },
       onComplete: () => {
         setIsStreaming(false);
         setLectureLoading(false);
+        setDialogMessages(prev => [...prev, {
+          id: (Date.now() + 1).toString(),
+          role: 'ai',
+          content: currentAiContent,
+          timestamp: new Date()
+        }]);
+        setCurrentAiContent('');
       },
       onError: (error) => {
         console.error('Failed to ask question:', error);
@@ -98,11 +134,10 @@ function Lecture() {
   };
 
   const handleGenerateQuiz = async () => {
-    if (!lectureContent || selectedIds.length === 0) return;
+    if (dialogMessages.length === 0 || selectedIds.length === 0) return;
     
     setLoading(true);
     try {
-      // Extract knowledge points from lecture content (simplified)
       const knowledgePoints = ['安全电压', '接地保护', '漏电保护'];
       
       const questionIds = wrongQuestions
@@ -119,51 +154,78 @@ function Lecture() {
   };
 
   if (loading && wrongQuestions.length === 0) {
-    return <div className="loading">加载中...</div>;
+    return (
+      <div className="loading">
+        <div className="spinner"></div>
+        <div>正在加载...</div>
+      </div>
+    );
   }
 
   return (
     <div>
-      <h1 style={{ marginBottom: '24px' }}>AI智能讲解</h1>
+      <header style={{ marginBottom: '40px' }}>
+        <h1>AI智能讲解</h1>
+        <p className="subtitle">针对错题的深度解析与知识巩固</p>
+      </header>
       
       {/* Wrong Questions Selection */}
-      {!lectureContent && (
+      {!lectureStarted && (
         <div className="card">
           <div className="card-title">选择错题进行讲解</div>
-          <div style={{ marginBottom: '16px' }}>
-            <span>已选择 {selectedIds.length} 道题</span>
-            <button 
-              className="btn" 
-              style={{ marginLeft: '16px' }}
-              onClick={() => setSelectedIds(wrongQuestions.map(wq => wq.id))}
-            >
-              全选
-            </button>
-            <button 
-              className="btn" 
-              style={{ marginLeft: '8px' }}
-              onClick={() => setSelectedIds([])}
-            >
-              清空
-            </button>
+          
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '20px',
+            paddingBottom: '16px',
+            borderBottom: '1px solid var(--color-parchment)'
+          }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: '600' }}>
+              已选择 {selectedIds.length} 道题
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button 
+                className="btn btn-sm" 
+                onClick={() => setSelectedIds(wrongQuestions.map(wq => wq.id))}
+              >
+                全选
+              </button>
+              <button 
+                className="btn btn-sm" 
+                onClick={() => setSelectedIds([])}
+              >
+                清空
+              </button>
+            </div>
           </div>
           
-          {wrongQuestions.map((wq) => (
-            <div key={wq.id} className="checkbox-item">
-              <input
-                type="checkbox"
-                checked={selectedIds.includes(wq.id)}
-                onChange={() => handleSelect(wq.id)}
-              />
-              <span>
-                题号 {wq.question.num}: {wq.question.question_text.substring(0, 50)}...
-              </span>
-            </div>
-          ))}
+          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+            {wrongQuestions.map((wq) => (
+              <div key={wq.id} className="checkbox-item">
+                <label className="custom-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(wq.id)}
+                    onChange={() => handleSelect(wq.id)}
+                  />
+                  <span className="checkbox-visual"></span>
+                </label>
+                <span style={{ fontFamily: 'var(--font-body)' }}>
+                  <strong style={{ color: 'var(--color-burgundy)' }}>
+                    题号 {wq.question.num}
+                  </strong>
+                  {' · '}
+                  {wq.question.question_text.substring(0, 60)}...
+                </span>
+              </div>
+            ))}
+          </div>
           
           <button 
             className="btn btn-primary btn-lg" 
-            style={{ marginTop: '16px' }}
+            style={{ marginTop: '24px', width: '100%' }}
             onClick={handleStartLecture}
             disabled={selectedIds.length === 0 || lectureLoading}
           >
@@ -172,73 +234,120 @@ function Lecture() {
         </div>
       )}
 
-      {/* Lecture Content */}
-      {lectureContent && (
-        <div className="card">
-          <div className="card-title">
-            讲解内容
-            {isStreaming && <span className="streaming-indicator"> (输出中...)</span>}
-          </div>
-          <div className="lecture-content">
-            <ReactMarkdown>{lectureContent}</ReactMarkdown>
-            {isStreaming && <span className="cursor">▊</span>}
+      {/* Lecture Conversation */}
+      {lectureStarted && (
+        <div className="conversation-section">
+          <div className="conversation-header">
+            <span className="icon">◆</span>
+            <span>讲解内容</span>
+            {isStreaming && <span className="conversation-streaming">正在输出...</span>}
           </div>
           
-          <div className="ai-input-group" style={{ marginTop: '24px' }}>
-            <input
-              type="text"
-              className="ai-input"
-              placeholder="继续提问..."
-              value={followUpQuestion}
-              onChange={(e) => setFollowUpQuestion(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleFollowUp()}
-              disabled={isStreaming}
-            />
+          <div className="dialog-cards">
+            {dialogMessages.map((msg) => (
+              <div key={msg.id} className={`dialog-card dialog-card-${msg.role}`}>
+                <div className="dialog-card-header">
+                  <span className="dialog-role">
+                    {msg.role === 'ai' ? 'AI 讲师' : '你的追问'}
+                  </span>
+                  <span className="dialog-timestamp">
+                    {msg.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div className="dialog-card-body lecture-content">
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+                </div>
+              </div>
+            ))}
+            
+            {isStreaming && currentAiContent && (
+              <div className="dialog-card dialog-card-ai">
+                <div className="dialog-card-header">
+                  <span className="dialog-role">AI 讲师</span>
+                  <span className="dialog-timestamp">正在生成...</span>
+                </div>
+                <div className="dialog-card-body lecture-content">
+                  <ReactMarkdown>{currentAiContent}</ReactMarkdown>
+                  <span className="streaming-cursor"></span>
+                </div>
+              </div>
+            )}
+            
+            {lectureLoading && !currentAiContent && (
+              <div className="dialog-card dialog-card-ai">
+                <div className="dialog-card-header">
+                  <span className="dialog-role">AI 讲师</span>
+                </div>
+                <div className="ai-thinking">
+                  正在准备讲解内容
+                  <span className="ai-thinking-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </span>
+                </div>
+              </div>
+            )}
+            
+            <div ref={dialogEndRef} />
+          </div>
+          
+          {/* Follow-up Input */}
+          <div className="follow-up-section">
+            <div className="follow-up-input-group">
+              <input
+                type="text"
+                className="follow-up-input"
+                placeholder="输入你的追问..."
+                value={followUpQuestion}
+                onChange={(e) => setFollowUpQuestion(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleFollowUp()}
+                disabled={isStreaming}
+              />
+              <button 
+                className="btn btn-primary"
+                onClick={handleFollowUp}
+                disabled={!followUpQuestion.trim() || lectureLoading || isStreaming}
+              >
+                {lectureLoading ? '思考中...' : '发送追问'}
+              </button>
+            </div>
+          </div>
+          
+          {/* Generate Quiz Button */}
+          <div style={{ marginTop: '24px' }}>
             <button 
-              className="btn btn-primary"
-              onClick={handleFollowUp}
-              disabled={!followUpQuestion.trim() || lectureLoading || isStreaming}
+              className="btn btn-success" 
+              onClick={handleGenerateQuiz}
+              disabled={loading || isStreaming}
+              style={{ width: '100%' }}
             >
-              {lectureLoading ? '思考中...' : '提问'}
+              {loading ? '生成测试题中...' : '基于讲解内容生成测试题'}
             </button>
           </div>
-          
-          <button 
-            className="btn btn-success" 
-            style={{ marginTop: '16px' }}
-            onClick={handleGenerateQuiz}
-            disabled={loading || isStreaming}
-          >
-            {loading ? '生成中...' : '生成测试题'}
-          </button>
         </div>
       )}
 
       {/* Quiz Questions */}
       {quizQuestions.length > 0 && (
-        <div className="card quiz-section">
+        <div className="card" style={{ marginTop: '24px' }}>
           <div className="card-title">测试题目</div>
-          {quizQuestions.map((q, index) => (
-            <div key={q.id} style={{ marginBottom: '24px', padding: '16px', border: '1px solid var(--border-color)', borderRadius: '8px' }}>
-              <div style={{ marginBottom: '12px' }}>
-                <strong>第 {index + 1} 题:</strong> {q.question_text}
+          <div className="question-list">
+            {quizQuestions.map((q, index) => (
+              <div key={q.id} className="question-item">
+                <span className="question-item-num">{index + 1}</span>
+                <span className="question-item-text">
+                  {q.question_text.substring(0, 80)}...
+                </span>
+                <Link 
+                  to={`/quiz/${q.id}`} 
+                  className="btn btn-primary btn-sm"
+                >
+                  做题
+                </Link>
               </div>
-              <div style={{ color: 'var(--text-secondary)' }}>
-                {Object.entries(q.options).map(([key, value]) => (
-                  <div key={key} style={{ marginBottom: '4px' }}>
-                    {key}. {value}
-                  </div>
-                ))}
-              </div>
-              <Link 
-                to={`/quiz/${q.id}`} 
-                className="btn btn-primary"
-                style={{ marginTop: '12px' }}
-              >
-                去做题
-              </Link>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </div>
