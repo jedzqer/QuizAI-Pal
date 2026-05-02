@@ -2,7 +2,7 @@
 # 用于同时启动前端和后端，并显示日志
 
 Write-Host "=====================================" -ForegroundColor Cyan
-Write-Host "   低压电工辅助学习系统启动脚本" -ForegroundColor Cyan
+Write-Host "   AI 辅助学习系统启动脚本" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host ""
 

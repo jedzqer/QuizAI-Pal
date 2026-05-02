@@ -1,6 +1,12 @@
-# AI刷题辅助学习系统
+# QuizAI-Pal - AI刷题辅助学习系统
 
 基于AI的辅助学习软件，支持刷题、错题记录、AI解析和智能讲解功能。适用于各类考试题库。
+
+## 环境要求
+
+- Python 3.8+
+- Node.js 16+
+- npm 或 yarn
 
 ## 快速开始
 
@@ -27,6 +33,12 @@ FRONTEND_PORT=5173
 
 ### 2. 启动系统
 
+启动脚本会自动完成以下操作：
+- 检查并创建 Python 虚拟环境 (`backend/venv`)
+- 在虚拟环境中安装后端依赖
+- 安装前端依赖（首次运行时）
+- 启动前后端服务
+
 #### Windows PowerShell（推荐）
 ```powershell
 .\start.ps1
@@ -35,6 +47,19 @@ FRONTEND_PORT=5173
 #### Windows 命令行
 ```cmd
 start.bat
+```
+
+#### 手动创建虚拟环境（可选）
+如果需要手动管理虚拟环境：
+```bash
+# 创建虚拟环境
+python -m venv backend/venv
+
+# 激活虚拟环境（Windows）
+backend\venv\Scripts\activate
+
+# 安装依赖
+pip install -r backend/requirements.txt
 ```
 
 ### 3. 访问系统
@@ -53,11 +78,12 @@ start.bat
 ## 项目结构
 
 ```
-learning-assistant/
+QuizAI-Pal/
 ├── .env                    # 环境配置文件
 ├── start.ps1              # PowerShell启动脚本
 ├── start.bat              # CMD启动脚本
 ├── backend/               # 后端代码
+│   ├── venv/             # Python虚拟环境（自动创建）
 │   ├── app/
 │   │   ├── main.py       # FastAPI应用
 │   │   ├── database.py   # 数据库配置
@@ -66,6 +92,7 @@ learning-assistant/
 │   │   └── services/     # 业务逻辑
 │   └── requirements.txt  # Python依赖
 └── frontend/              # 前端代码
+    ├── node_modules/     # Node依赖（自动安装）
     ├── src/
     │   ├── pages/        # 页面组件
     │   ├── services/     # API服务
