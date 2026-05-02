@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { questionsApi } from '../services/api';
-import { WrongQuestion } from '../types';
+import type { WrongQuestion } from '../types';
 
 function WrongQuestions() {
   const [wrongQuestions, setWrongQuestions] = useState<WrongQuestion[]>([]);

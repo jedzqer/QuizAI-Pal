@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { answersApi } from '../services/api';
-import { Statistics } from '../types';
+import type { Statistics } from '../types';
 
 function Home() {
   const [stats, setStats] = useState<Statistics | null>(null);

@@ -50,7 +50,8 @@ Write-Host ""
 $backendJob = Start-Job -ScriptBlock {
     param($workdir, $port)
     Set-Location "$workdir/backend"
-    & ../backend/venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port $port --reload
+    $env:PYTHONIOENCODING = "utf-8"
+    & ../backend/venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port $port --reload 2>&1
 } -ArgumentList (Get-Location).Path, $backendPort
 
 # 启动前端

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { questionsApi, aiApi } from '../services/api';
-import { WrongQuestion, Question } from '../types';
+import type { WrongQuestion, Question } from '../types';
 
 function Lecture() {
   const location = useLocation();

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { questionsApi, answersApi, aiApi } from '../services/api';
-import { Question, AnswerResponse, AIResponse } from '../types';
+import type { Question, AnswerResponse, AIResponse } from '../types';
 
 function Quiz() {
   const { questionId } = useParams();
