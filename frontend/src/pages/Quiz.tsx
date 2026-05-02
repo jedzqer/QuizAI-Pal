@@ -93,6 +93,7 @@ function Quiz() {
   const { questionId } = useParams();
   const navigate = useNavigate();
   const dialogEndRef = useRef<HTMLDivElement>(null);
+  const navRef = useRef<HTMLDivElement>(null);
   
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -127,6 +128,15 @@ function Quiz() {
   useEffect(() => {
     dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [dialogMessages, currentAiContent]);
+
+  // Scroll to navigation buttons after answering
+  useEffect(() => {
+    if (answerResult) {
+      setTimeout(() => {
+        navRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 200);
+    }
+  }, [answerResult]);
 
   // Trigger answer feedback animation
   useEffect(() => {
@@ -250,7 +260,7 @@ function Quiz() {
 
   const handleMarkConfusing = async () => {
     if (!currentQuestion || markLoading) return;
-    
+
     setMarkLoading(true);
     try {
       await answersApi.markConfusing(currentQuestion.id);
@@ -261,6 +271,13 @@ function Quiz() {
       setMarkLoading(false);
     }
   };
+
+  // Auto-mark as confusing when answer is wrong
+  useEffect(() => {
+    if (answerResult && !answerResult.is_correct) {
+      handleMarkConfusing();
+    }
+  }, [answerResult]);
 
   const handleFollowUp = async () => {
     if (!currentQuestion || !sessionId || !followUpQuestion.trim()) return;
@@ -320,8 +337,8 @@ function Quiz() {
       navigate(`/quiz`);
       loadQuestionByNum(nextNum);
       setSlidePhase('in-right');
-      setTimeout(() => setSlidePhase(null), 300);
-    }, 280);
+      setTimeout(() => setSlidePhase(null), 180);
+    }, 150);
   };
 
   const handlePrev = () => {
@@ -333,8 +350,8 @@ function Quiz() {
         navigate(`/quiz`);
         loadQuestionByNum(prevNum);
         setSlidePhase('in-left');
-        setTimeout(() => setSlidePhase(null), 300);
-      }, 280);
+        setTimeout(() => setSlidePhase(null), 180);
+      }, 150);
     }
   };
 
@@ -502,7 +519,7 @@ function Quiz() {
       )}
 
       {/* Navigation */}
-      <div className="nav-buttons">
+      <div className="nav-buttons" ref={navRef}>
         <button 
           className="btn" 
           onClick={handlePrev}
