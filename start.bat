@@ -12,6 +12,12 @@ if not exist ".env" (
     exit /b 1
 )
 
+REM 读取端口配置
+set BACKEND_PORT=8003
+set FRONTEND_PORT=5173
+for /f "tokens=1,* delims==" %%a in ('findstr /i "BACKEND_PORT=" .env') do set BACKEND_PORT=%%b
+for /f "tokens=1,* delims==" %%a in ('findstr /i "FRONTEND_PORT=" .env') do set FRONTEND_PORT=%%b
+
 REM 安装后端依赖
 echo [检查] 后端依赖...
 if not exist "backend\venv" (
@@ -35,18 +41,18 @@ echo [启动] 正在启动服务...
 echo.
 
 REM 启动后端（新窗口）
-start "后端服务" cmd /k "cd backend && ..\backend\venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+start "后端服务" cmd /k "cd backend && ..\backend\venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port %BACKEND_PORT% --reload"
 
 REM 启动前端（新窗口）
-start "前端服务" cmd /k "cd frontend && npm run dev"
+start "前端服务" cmd /k "cd frontend && npm run dev -- --port %FRONTEND_PORT%"
 
 echo =====================================
 echo    服务已启动!
 echo =====================================
 echo.
-echo    前端地址: http://localhost:5173
-echo    后端地址: http://localhost:8000
-echo    API文档:  http://localhost:8000/docs
+echo    前端地址: http://localhost:%FRONTEND_PORT%
+echo    后端地址: http://localhost:%BACKEND_PORT%
+echo    API文档:  http://localhost:%BACKEND_PORT%/docs
 echo.
 echo    关闭对应的命令行窗口可停止服务
 echo =====================================

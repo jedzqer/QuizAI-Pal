@@ -14,7 +14,7 @@ if (-not (Test-Path ".env")) {
 
 # 读取配置
 $envContent = Get-Content ".env" -Raw
-$backendPort = if ($envContent -match "BACKEND_PORT=(\d+)") { $Matches[1] } else { "8000" }
+$backendPort = if ($envContent -match "BACKEND_PORT=(\d+)") { $Matches[1] } else { "8003" }
 $frontendPort = if ($envContent -match "FRONTEND_PORT=(\d+)") { $Matches[1] } else { "5173" }
 
 Write-Host "[配置] 后端端口: $backendPort" -ForegroundColor Yellow
@@ -46,17 +46,17 @@ Write-Host ""
 
 # 启动后端
 $backendJob = Start-Job -ScriptBlock {
-    param($workdir)
-    Set-Location $workdir
-    & backend/venv/Scripts/python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload
-} -ArgumentList (Get-Location).Path
+    param($workdir, $port)
+    Set-Location "$workdir/backend"
+    & ../backend/venv/Scripts/python -m uvicorn app.main:app --host 0.0.0.0 --port $port --reload
+} -ArgumentList (Get-Location).Path, $backendPort
 
 # 启动前端
 $frontendJob = Start-Job -ScriptBlock {
-    param($workdir)
+    param($workdir, $port)
     Set-Location "$workdir/frontend"
-    npm run dev -- --port 5173
-} -ArgumentList (Get-Location).Path
+    npm run dev -- --port $port
+} -ArgumentList (Get-Location).Path, $frontendPort
 
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host "   服务已启动!" -ForegroundColor Cyan

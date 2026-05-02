@@ -1,6 +1,6 @@
 # QuizAI-Pal - AI刷题辅助学习系统
 
-基于AI的辅助学习软件，支持刷题、错题记录、AI解析和智能讲解功能。适用于各类考试题库。
+QuizAI-Pal是基于AI的辅助学习软件，支持刷题、错题记录、AI解析和智能讲解功能。适用于各类考试题库。
 
 ## 环境要求
 
@@ -65,8 +65,8 @@ pip install -r backend/requirements.txt
 ### 3. 访问系统
 
 - 前端地址: http://localhost:5173
-- 后端地址: http://localhost:8000
-- API文档: http://localhost:8000/docs
+- 后端地址: http://localhost:8003
+- API文档: http://localhost:8003/docs
 
 ## 功能特性
 
@@ -116,7 +116,7 @@ QuizAI-Pal/
 
 通过API导入：
 ```bash
-curl -X POST "http://localhost:8000/api/questions/import?file_path=backend/data/题库.json"
+curl -X POST "http://localhost:8003/api/questions/import?file_path=backend/data/题库.json"
 ```
 
 ## 自定义API配置
@@ -146,7 +146,6 @@ OPENAI_API_BASE_URL=https://your-api-endpoint/v1
 AI_ROLE=你是一位专业的培训教师，擅长讲解各类考试题目
 
 # 特定领域
-AI_ROLE=你是一位低压电工培训专家
 AI_ROLE=你是一位医学考试辅导教师
 AI_ROLE=你是一位编程面试辅导老师
 ```
