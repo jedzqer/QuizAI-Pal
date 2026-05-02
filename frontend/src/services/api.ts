@@ -15,6 +15,7 @@ export interface StreamCallbacks {
   onChunk?: (content: string) => void;
   onComplete?: (sessionId: string) => void;
   onError?: (error: Error) => void;
+  signal?: AbortSignal;
 }
 
 async function fetchStream(
@@ -22,8 +23,8 @@ async function fetchStream(
   body: Record<string, unknown>,
   callbacks: StreamCallbacks
 ): Promise<void> {
-  const { onChunk, onComplete, onError } = callbacks;
-  
+  const { onChunk, onComplete, onError, signal } = callbacks;
+
   try {
     const response = await fetch(`${API_BASE_URL}${url}`, {
       method: 'POST',
@@ -31,6 +32,7 @@ async function fetchStream(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
+      signal,
     });
 
     if (!response.ok) {
@@ -44,16 +46,17 @@ async function fetchStream(
 
     const decoder = new TextDecoder();
     let buffer = '';
+    let completed = false;
 
     while (true) {
       const { done, value } = await reader.read();
-      
+
       if (done) {
         break;
       }
 
       buffer += decoder.decode(value, { stream: true });
-      
+
       // Process SSE events
       const lines = buffer.split('\n');
       buffer = lines.pop() || ''; // Keep incomplete line in buffer
@@ -62,13 +65,14 @@ async function fetchStream(
         if (line.startsWith('data: ')) {
           try {
             const data = JSON.parse(line.slice(6));
-            
+
             if (data.done) {
+              completed = true;
               onComplete?.(data.session_id || '');
             } else if (data.content) {
               onChunk?.(data.content);
             }
-            
+
             if (data.error) {
               throw new Error(data.error);
             }
@@ -82,7 +86,36 @@ async function fetchStream(
         }
       }
     }
+
+    // Process any remaining buffer content
+    if (buffer.trim()) {
+      const lines = buffer.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.done) {
+              completed = true;
+              onComplete?.(data.session_id || '');
+            } else if (data.content) {
+              onChunk?.(data.content);
+            }
+          } catch (_) {
+            // Skip invalid JSON in trailing buffer
+          }
+        }
+      }
+    }
+
+    // Fallback: if stream ended without a done event, call onComplete anyway
+    if (!completed) {
+      onComplete?.('');
+    }
   } catch (error) {
+    // Don't report intentional aborts as errors
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return;
+    }
     onError?.(error instanceof Error ? error : new Error(String(error)));
   }
 }

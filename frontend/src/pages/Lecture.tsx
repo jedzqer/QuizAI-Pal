@@ -4,6 +4,30 @@ import ReactMarkdown from 'react-markdown';
 import { questionsApi, aiApi } from '../services/api';
 import type { WrongQuestion, Question } from '../types';
 
+const LECTURE_STORAGE_KEY = 'lecture_state';
+
+interface LectureState {
+  dialogMessages: Array<{ id: string; role: 'ai' | 'user'; content: string; timestamp: string }>;
+  sessionId: string | null;
+  selectedIds: number[];
+  lectureStarted: boolean;
+}
+
+function saveLectureState(state: LectureState) {
+  try {
+    localStorage.setItem(LECTURE_STORAGE_KEY, JSON.stringify(state));
+  } catch (_) { /* ignore quota errors */ }
+}
+
+function loadLectureState(): LectureState | null {
+  try {
+    const raw = localStorage.getItem(LECTURE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 interface DialogMessage {
   id: string;
   role: 'ai' | 'user';
@@ -15,25 +39,73 @@ function Lecture() {
   const location = useLocation();
   const wrongQuestionIds = location.state?.wrongQuestionIds || [];
   const dialogEndRef = useRef<HTMLDivElement>(null);
-  
+  const streamedContentRef = useRef<string>('');
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const saved = loadLectureState();
+
   const [wrongQuestions, setWrongQuestions] = useState<WrongQuestion[]>([]);
-  const [selectedIds, setSelectedIds] = useState<number[]>(wrongQuestionIds);
-  const [dialogMessages, setDialogMessages] = useState<DialogMessage[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>(
+    wrongQuestionIds.length > 0 ? wrongQuestionIds : (saved?.selectedIds || [])
+  );
+  const [dialogMessages, setDialogMessages] = useState<DialogMessage[]>(
+    saved?.dialogMessages.map(m => ({ ...m, timestamp: new Date(m.timestamp) })) || []
+  );
   const [currentAiContent, setCurrentAiContent] = useState<string>('');
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(saved?.sessionId || null);
   const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(false);
   const [lectureLoading, setLectureLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
-  const [lectureStarted, setLectureStarted] = useState(false);
+  const [lectureStarted, setLectureStarted] = useState(saved?.lectureStarted || false);
+
+  // Persist lecture state on change
+  useEffect(() => {
+    if (lectureStarted) {
+      saveLectureState({
+        dialogMessages: dialogMessages.map(m => ({ ...m, timestamp: m.timestamp.toISOString() })),
+        sessionId,
+        selectedIds,
+        lectureStarted,
+      });
+    }
+  }, [dialogMessages, sessionId, selectedIds, lectureStarted]);
+
+  // Abort stream on unmount, save partial content
+  useEffect(() => {
+    return () => {
+      const partial = streamedContentRef.current;
+      if (partial) {
+        const state = loadLectureState();
+        if (state) {
+          state.dialogMessages.push({
+            id: Date.now().toString(),
+            role: 'ai',
+            content: partial,
+            timestamp: new Date().toISOString(),
+          });
+          saveLectureState(state);
+        }
+      }
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     loadWrongQuestions();
   }, []);
 
   useEffect(() => {
-    dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = dialogEndRef.current;
+    if (!el) return;
+    const container = el.closest('.dialog-cards');
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // Only auto-scroll if user is near the bottom (within 150px)
+    if (scrollHeight - scrollTop - clientHeight < 150) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [dialogMessages, currentAiContent]);
 
   const loadWrongQuestions = async () => {
@@ -61,17 +133,26 @@ function Lecture() {
 
   const handleStartLecture = async () => {
     if (selectedIds.length === 0) return;
-    
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLectureLoading(true);
     setIsStreaming(true);
     setLectureStarted(true);
     setCurrentAiContent('');
     setDialogMessages([]);
     setQuizQuestions([]);
-    
+
+    streamedContentRef.current = '';
+
     await aiApi.startLecture(selectedIds, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => prev + content);
+        setCurrentAiContent(prev => {
+          streamedContentRef.current = prev + content;
+          return prev + content;
+        });
       },
       onComplete: (newSessionId) => {
         setSessionId(newSessionId);
@@ -80,7 +161,7 @@ function Lecture() {
         setDialogMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: 'ai',
-          content: currentAiContent,
+          content: streamedContentRef.current,
           timestamp: new Date()
         }]);
         setCurrentAiContent('');
@@ -89,30 +170,39 @@ function Lecture() {
         console.error('Failed to start lecture:', error);
         setIsStreaming(false);
         setLectureLoading(false);
-      }
+      },
+      signal: controller.signal,
     });
   };
 
   const handleFollowUp = async () => {
     if (!sessionId || !followUpQuestion.trim()) return;
-    
+
     const question = followUpQuestion;
     setFollowUpQuestion('');
-    
+
     setDialogMessages(prev => [...prev, {
       id: Date.now().toString(),
       role: 'user',
       content: question,
       timestamp: new Date()
     }]);
-    
+
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLectureLoading(true);
     setIsStreaming(true);
     setCurrentAiContent('');
-    
+    streamedContentRef.current = '';
+
     await aiApi.askQuestion(0, sessionId, question, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => prev + content);
+        setCurrentAiContent(prev => {
+          streamedContentRef.current = prev + content;
+          return prev + content;
+        });
       },
       onComplete: () => {
         setIsStreaming(false);
@@ -120,7 +210,7 @@ function Lecture() {
         setDialogMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           role: 'ai',
-          content: currentAiContent,
+          content: streamedContentRef.current,
           timestamp: new Date()
         }]);
         setCurrentAiContent('');
@@ -129,7 +219,8 @@ function Lecture() {
         console.error('Failed to ask question:', error);
         setIsStreaming(false);
         setLectureLoading(false);
-      }
+      },
+      signal: controller.signal,
     });
   };
 

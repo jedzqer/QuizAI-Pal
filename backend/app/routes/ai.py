@@ -39,30 +39,34 @@ def stream_response(generator, session_id: str, db: Session,
         
         # Stream completed, save to database
         complete_content = "".join(full_content)
-        
-        # Save user message
-        user_msg = AIConversation(
-            user_id=user_id,
-            question_id=question_id,
-            session_id=session_id,
-            role="user",
-            content=user_content
-        )
-        db.add(user_msg)
-        
-        # Save assistant response
-        assistant_msg = AIConversation(
-            user_id=user_id,
-            question_id=question_id,
-            session_id=session_id,
-            role="assistant",
-            content=complete_content
-        )
-        db.add(assistant_msg)
-        
-        db.commit()
-        
-        # Send final done event with session_id
+
+        try:
+            # Save user message
+            user_msg = AIConversation(
+                user_id=user_id,
+                question_id=question_id,
+                session_id=session_id,
+                role="user",
+                content=user_content
+            )
+            db.add(user_msg)
+
+            # Save assistant response
+            assistant_msg = AIConversation(
+                user_id=user_id,
+                question_id=question_id,
+                session_id=session_id,
+                role="assistant",
+                content=complete_content
+            )
+            db.add(assistant_msg)
+
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"Failed to save conversation: {e}")
+
+        # Always send done event so client can finalize
         data = json.dumps({"content": "", "done": True, "session_id": session_id}, ensure_ascii=False)
         yield f"data: {data}\n\n"
     

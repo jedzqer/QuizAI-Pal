@@ -94,6 +94,7 @@ function Quiz() {
   const navigate = useNavigate();
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
+  const streamedContentRef = useRef<string>('');
   
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -126,7 +127,14 @@ function Quiz() {
   }, [currentNum]);
 
   useEffect(() => {
-    dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = dialogEndRef.current;
+    if (!el) return;
+    const container = el.closest('.dialog-cards');
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    if (scrollHeight - scrollTop - clientHeight < 150) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [dialogMessages, currentAiContent]);
 
   // Scroll to navigation buttons after answering
@@ -232,20 +240,23 @@ function Quiz() {
     setIsStreaming(true);
     setShowExplanation(true);
     setCurrentAiContent('');
-    
+    streamedContentRef.current = '';
+
     await aiApi.explainAnswer(currentQuestion.id, selectedAnswer, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => prev + content);
+        setCurrentAiContent(prev => {
+          streamedContentRef.current = prev + content;
+          return prev + content;
+        });
       },
       onComplete: (newSessionId) => {
         setSessionId(newSessionId);
         setIsStreaming(false);
         setAiLoading(false);
-        // Add completed AI message to dialog
         setDialogMessages(prev => [...prev, {
           id: Date.now().toString(),
           role: 'ai',
-          content: currentAiContent,
+          content: streamedContentRef.current,
           timestamp: new Date()
         }]);
         setCurrentAiContent('');
@@ -296,19 +307,22 @@ function Quiz() {
     setAiLoading(true);
     setIsStreaming(true);
     setCurrentAiContent('');
-    
+    streamedContentRef.current = '';
+
     await aiApi.askQuestion(currentQuestion.id, sessionId, question, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => prev + content);
+        setCurrentAiContent(prev => {
+          streamedContentRef.current = prev + content;
+          return prev + content;
+        });
       },
       onComplete: () => {
         setIsStreaming(false);
         setAiLoading(false);
-        // Add completed AI response to dialog
         setDialogMessages(prev => [...prev, {
           id: (Date.now() + 1).toString(),
           role: 'ai',
-          content: currentAiContent,
+          content: streamedContentRef.current,
           timestamp: new Date()
         }]);
         setCurrentAiContent('');
