@@ -41,6 +41,8 @@ function Lecture() {
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const streamedContentRef = useRef<string>('');
   const abortControllerRef = useRef<AbortController | null>(null);
+  const userScrolledUpRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const saved = loadLectureState();
 
@@ -59,6 +61,7 @@ function Lecture() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [lectureStarted, setLectureStarted] = useState(saved?.lectureStarted || false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   // Persist lecture state on change
   useEffect(() => {
@@ -96,17 +99,46 @@ function Lecture() {
     loadWrongQuestions();
   }, []);
 
+  // Track user scroll position to avoid force-scrolling when user scrolls up
   useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight <= 80;
+      userScrolledUpRef.current = !atBottom;
+      setShowScrollBtn(!atBottom && isStreaming);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [lectureStarted, isStreaming]);
+
+  // Hide scroll button when streaming stops
+  useEffect(() => {
+    if (!isStreaming) setShowScrollBtn(false);
+  }, [isStreaming]);
+
+  // Auto-scroll only when user hasn't scrolled up
+  useEffect(() => {
+    if (userScrolledUpRef.current) return;
     const el = dialogEndRef.current;
     if (!el) return;
-    const container = el.closest('.dialog-cards');
-    if (!container) return;
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    // Only auto-scroll if user is near the bottom (within 150px)
-    if (scrollHeight - scrollTop - clientHeight < 150) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
+    el.scrollIntoView({ behavior: 'smooth' });
   }, [dialogMessages, currentAiContent]);
+
+  const handleExitLecture = () => {
+    abortControllerRef.current?.abort();
+    setIsStreaming(false);
+    setLectureLoading(false);
+    setLectureStarted(false);
+    setDialogMessages([]);
+    setCurrentAiContent('');
+    setSessionId(null);
+    streamedContentRef.current = '';
+    localStorage.removeItem(LECTURE_STORAGE_KEY);
+  };
 
   const loadWrongQuestions = async () => {
     setLoading(true);
@@ -168,8 +200,19 @@ function Lecture() {
       },
       onError: (error) => {
         console.error('Failed to start lecture:', error);
+        // Save any partial content that was streamed before the error
+        const partial = streamedContentRef.current;
+        if (partial) {
+          setDialogMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'ai',
+            content: partial,
+            timestamp: new Date()
+          }]);
+        }
         setIsStreaming(false);
         setLectureLoading(false);
+        setCurrentAiContent('');
       },
       signal: controller.signal,
     });
@@ -217,8 +260,18 @@ function Lecture() {
       },
       onError: (error) => {
         console.error('Failed to ask question:', error);
+        const partial = streamedContentRef.current;
+        if (partial) {
+          setDialogMessages(prev => [...prev, {
+            id: Date.now().toString(),
+            role: 'ai',
+            content: partial,
+            timestamp: new Date()
+          }]);
+        }
         setIsStreaming(false);
         setLectureLoading(false);
+        setCurrentAiContent('');
       },
       signal: controller.signal,
     });
@@ -308,7 +361,7 @@ function Lecture() {
                     题号 {wq.question.num}
                   </strong>
                   {' · '}
-                  {wq.question.question_text.substring(0, 60)}...
+                  {wq.question.question_text.trim().substring(0, 60)}...
                 </span>
               </div>
             ))}
@@ -329,12 +382,21 @@ function Lecture() {
       {lectureStarted && (
         <div className="conversation-section">
           <div className="conversation-header">
-            <span className="icon">◆</span>
-            <span>讲解内容</span>
-            {isStreaming && <span className="conversation-streaming">正在输出...</span>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span className="icon">◆</span>
+              <span>讲解内容</span>
+              {isStreaming && <span className="conversation-streaming">正在输出...</span>}
+            </div>
+            <button
+              className="btn btn-sm"
+              onClick={handleExitLecture}
+              title="退出讲解，返回选题"
+            >
+              退出讲解
+            </button>
           </div>
           
-          <div className="dialog-cards">
+          <div className="dialog-cards" ref={scrollContainerRef}>
             {dialogMessages.map((msg) => (
               <div key={msg.id} className={`dialog-card dialog-card-${msg.role}`}>
                 <div className="dialog-card-header">
@@ -382,7 +444,19 @@ function Lecture() {
             
             <div ref={dialogEndRef} />
           </div>
-          
+
+          {showScrollBtn && (
+            <button
+              className="btn btn-sm scroll-to-bottom-btn"
+              onClick={() => {
+                userScrolledUpRef.current = false;
+                dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              ↓ 回到底部
+            </button>
+          )}
+
           {/* Follow-up Input */}
           <div className="follow-up-section">
             <div className="follow-up-input-group">
