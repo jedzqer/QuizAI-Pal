@@ -74,6 +74,7 @@ pip install -r backend/requirements.txt
 - ❌ **错题管理**: 自动记录错题，支持重做
 - 🎓 **AI讲解**: 智能分析错题，针对性讲解
 - 📊 **学习统计**: 答题总数、正确率统计
+- 📁 **题库管理**: 可视化导入题库，支持拖放上传
 
 ## 项目结构
 
@@ -102,7 +103,11 @@ QuizAI-Pal/
 
 ## 题库导入
 
-将题库文件放在 `backend/data/` 目录下，格式如下：
+1. 启动系统后，访问前端页面
+2. 点击导航栏「题库」进入题库管理页面
+3. 拖放 JSON 文件到上传区域，或点击选择文件上传
+
+题库文件格式：
 
 ```json
 [
@@ -112,11 +117,6 @@ QuizAI-Pal/
     "answer": "A"
   }
 ]
-```
-
-通过API导入：
-```bash
-curl -X POST "http://localhost:8003/api/questions/import?file_path=backend/data/题库.json"
 ```
 
 ## 自定义API配置

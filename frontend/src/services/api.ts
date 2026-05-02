@@ -25,7 +25,13 @@ export const questionsApi = {
 
   getWrongQuestions: () => api.get('/api/questions/wrong'),
 
-  importQuestions: (filePath: string) => api.post('/api/questions/import', null, { params: { file_path: filePath } }),
+  importQuestions: (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/api/questions/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 // Answers API

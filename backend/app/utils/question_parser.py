@@ -57,12 +57,3 @@ def parse_question_bank(json_content: str) -> List[Dict[str, Any]]:
         parsed_questions.append(parsed)
     
     return parsed_questions
-
-
-def load_question_bank(file_path: str) -> List[Dict[str, Any]]:
-    """
-    Load and parse question bank from a JSON file.
-    """
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    return parse_question_bank(content)

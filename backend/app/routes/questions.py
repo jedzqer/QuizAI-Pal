@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional
 import json
@@ -9,7 +9,7 @@ from app.models.schemas import (
     QuestionResponse, QuestionListResponse, AnswerSubmit, 
     AnswerResponse, StatisticsResponse, WrongQuestionResponse
 )
-from app.utils.question_parser import load_question_bank
+from app.utils.question_parser import parse_question_bank
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
 
@@ -154,17 +154,22 @@ def get_question(question_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/import")
-def import_questions(file_path: str, db: Session = Depends(get_db)):
-    """Import questions from JSON file."""
+async def import_questions(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Import questions from uploaded JSON file."""
     try:
-        parsed_questions = load_question_bank(file_path)
+        # Read file content
+        content = await file.read()
+        json_content = content.decode('utf-8')
+        
+        # Parse questions
+        parsed_questions = parse_question_bank(json_content)
         
         for q_data in parsed_questions:
             question = Question(**q_data)
             db.add(question)
         
         db.commit()
-        return {"message": f"Successfully imported {len(parsed_questions)} questions"}
+        return {"message": f"Successfully imported {len(parsed_questions)} questions", "count": len(parsed_questions)}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
