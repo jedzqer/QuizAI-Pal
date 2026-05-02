@@ -4,8 +4,10 @@ QuizAI-Pal是基于AI的辅助学习软件，支持刷题、错题记录、AI解
 
 ## 环境要求
 
-- Python 3.8+
-- Node.js 16+
+以下为经过验证的版本(非硬性要求)：
+
+- Python 3.13.2
+- Node.js v24.13.1
 - npm 或 yarn
 
 ## 快速开始
