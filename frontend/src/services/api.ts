@@ -119,6 +119,9 @@ export const answersApi = {
   getStatistics: () => api.get('/api/answers/statistics'),
 
   getHistory: (limit = 50) => api.get('/api/answers/history', { params: { limit } }),
+
+  markConfusing: (questionId: number) =>
+    api.post('/api/answers/mark-confusing', { question_id: questionId }),
 };
 
 // AI API with streaming support

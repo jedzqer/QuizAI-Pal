@@ -18,6 +18,8 @@ function Quiz() {
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [isMarkedConfusing, setIsMarkedConfusing] = useState(false);
+  const [markLoading, setMarkLoading] = useState(false);
   const [currentNum, setCurrentNum] = useState(() => {
     const saved = localStorage.getItem('quiz_current_num');
     return saved ? parseInt(saved) : 1;
@@ -42,6 +44,8 @@ function Quiz() {
     setShowExplanation(false);
     setAiContent('');
     setSessionId(null);
+    setIsMarkedConfusing(false);
+    setMarkLoading(false);
     
     try {
       const response = await questionsApi.getQuestion(id);
@@ -60,6 +64,8 @@ function Quiz() {
     setShowExplanation(false);
     setAiContent('');
     setSessionId(null);
+    setIsMarkedConfusing(false);
+    setMarkLoading(false);
     
     try {
       const response = await questionsApi.getQuestions(num, 1);
@@ -111,6 +117,20 @@ function Quiz() {
         setAiLoading(false);
       }
     });
+  };
+
+  const handleMarkConfusing = async () => {
+    if (!currentQuestion || markLoading) return;
+    
+    setMarkLoading(true);
+    try {
+      await answersApi.markConfusing(currentQuestion.id);
+      setIsMarkedConfusing(true);
+    } catch (error) {
+      console.error('Failed to mark question as confusing:', error);
+    } finally {
+      setMarkLoading(false);
+    }
   };
 
   const handleFollowUp = async () => {
@@ -197,12 +217,19 @@ function Quiz() {
 
         {/* Action Buttons */}
         {answerResult && !showExplanation && (
-          <div style={{ marginTop: '24px' }}>
+          <div style={{ marginTop: '24px', display: 'flex', gap: '12px' }}>
             <button 
               className="btn btn-primary" 
               onClick={handleExplain}
             >
               AI解析
+            </button>
+            <button 
+              className="btn btn-warning"
+              onClick={handleMarkConfusing}
+              disabled={isMarkedConfusing || markLoading}
+            >
+              {isMarkedConfusing ? '已加入错题本' : (markLoading ? '加入中...' : '不懂')}
             </button>
           </div>
         )}

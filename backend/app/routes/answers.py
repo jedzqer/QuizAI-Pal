@@ -155,3 +155,40 @@ def get_answer_history(
         })
     
     return result
+
+
+@router.post("/mark-confusing")
+def mark_question_as_confusing(data: dict, db: Session = Depends(get_db)):
+    """主动将题目标记为不懂，加入错题本"""
+    get_or_create_default_user(db)
+    
+    question_id = data.get("question_id")
+    if not question_id:
+        raise HTTPException(status_code=400, detail="question_id is required")
+    
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    # 查询是否已在错题本中
+    wrong_question = db.query(WrongQuestion).filter(
+        WrongQuestion.user_id == DEFAULT_USER_ID,
+        WrongQuestion.question_id == question_id
+    ).first()
+    
+    if wrong_question:
+        # 已存在，重置 mastered 状态
+        wrong_question.mastered = False
+        wrong_question.last_wrong_at = datetime.now()
+    else:
+        # 不存在，新建错题记录
+        wrong_question = WrongQuestion(
+            user_id=DEFAULT_USER_ID,
+            question_id=question_id,
+            wrong_count=0,
+            last_wrong_at=datetime.now()
+        )
+        db.add(wrong_question)
+    
+    db.commit()
+    return {"message": "已加入错题本", "question_id": question_id}

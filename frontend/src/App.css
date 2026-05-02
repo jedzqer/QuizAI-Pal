@@ -125,6 +125,22 @@ body {
   border-color: var(--error-color);
 }
 
+.btn-warning {
+  background-color: var(--warning-color);
+  color: white;
+  border-color: var(--warning-color);
+}
+
+.btn-warning:hover {
+  background-color: #ffc53d;
+  border-color: #ffc53d;
+}
+
+.btn-warning:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
 .btn-lg {
   padding: 12px 24px;
   font-size: 16px;
