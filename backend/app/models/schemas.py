@@ -78,7 +78,7 @@ class AILectureRequest(BaseModel):
 
 
 class AIQuizRequest(BaseModel):
-    knowledge_points: List[str]
+    lecture_content: str
     question_ids: List[int]
 
 

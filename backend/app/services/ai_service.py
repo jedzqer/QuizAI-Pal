@@ -112,24 +112,30 @@ class AIService:
             if chunk.choices[0].delta.content is not None:
                 yield chunk.choices[0].delta.content
     
-    def select_quiz_questions(self, knowledge_points: List[str], 
+    def select_quiz_questions(self, lecture_content: str,
                             available_questions: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Select quiz questions based on knowledge points.
+        Select quiz questions based on lecture content.
         """
         questions_text = "\n".join([
             f"ID:{q['id']} 题目: {q['question_text']}"
             for q in available_questions
         ])
-        
-        knowledge_text = "、".join(knowledge_points)
-        
-        prompt = f"""基于刚才讲解的知识点，从题库中选择3道相关题目测试用户掌握程度：
 
-知识点：{knowledge_text}
-可用题目：
+        # Truncate lecture content to avoid exceeding token limits
+        max_content_len = 3000
+        if len(lecture_content) > max_content_len:
+            lecture_content = lecture_content[:max_content_len] + "..."
+
+        prompt = f"""基于刚才的AI讲解内容，从题库中选择3道最相关的题目来测试用户掌握程度：
+
+AI讲解内容：
+{lecture_content}
+
+可选题目：
 {questions_text}
 
+请分析讲解内容中涉及的知识点，从可选题目中选出3道最相关的题目。
 请返回JSON格式，包含选择的题目ID和选择理由：
 {{"selected_ids": [1, 2, 3], "reasons": ["理由1", "理由2", "理由3"]}}
 

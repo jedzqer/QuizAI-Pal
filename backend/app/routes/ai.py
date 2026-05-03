@@ -200,7 +200,7 @@ def generate_quiz(request: AIQuizRequest, db: Session = Depends(get_db)):
         })
     
     # Select quiz questions
-    result = ai_service.select_quiz_questions(request.knowledge_points, questions_data)
+    result = ai_service.select_quiz_questions(request.lecture_content, questions_data)
     
     # Get selected questions
     selected_ids = result.get("selected_ids", [])

@@ -278,20 +278,36 @@ function Lecture() {
   };
 
   const handleGenerateQuiz = async () => {
-    if (dialogMessages.length === 0 || selectedIds.length === 0) return;
-    
+    if (dialogMessages.length === 0) {
+      alert('请先等待讲解内容生成完成');
+      return;
+    }
+    if (selectedIds.length === 0) {
+      alert('没有选中的错题，无法生成测试题');
+      return;
+    }
+
+    const questionIds = wrongQuestions
+      .filter(wq => selectedIds.includes(wq.id))
+      .map(wq => wq.question_id);
+
+    if (questionIds.length === 0) {
+      alert('未找到对应的题目数据，请返回重新选择错题');
+      return;
+    }
+
     setLoading(true);
     try {
-      const knowledgePoints = ['安全电压', '接地保护', '漏电保护'];
-      
-      const questionIds = wrongQuestions
-        .filter(wq => selectedIds.includes(wq.id))
-        .map(wq => wq.question_id);
-      
-      const response = await aiApi.generateQuiz(knowledgePoints, questionIds);
+      const lectureContent = dialogMessages
+        .filter(m => m.role === 'ai')
+        .map(m => m.content)
+        .join('\n');
+
+      const response = await aiApi.generateQuiz(lectureContent, questionIds);
       setQuizQuestions(response.data.questions);
     } catch (error) {
       console.error('Failed to generate quiz:', error);
+      alert('生成测试题失败，请稍后重试');
     } finally {
       setLoading(false);
     }
