@@ -244,10 +244,8 @@ function Quiz() {
 
     await aiApi.explainAnswer(currentQuestion.id, selectedAnswer, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => {
-          streamedContentRef.current = prev + content;
-          return prev + content;
-        });
+        streamedContentRef.current += content;
+        setCurrentAiContent(streamedContentRef.current);
       },
       onComplete: (newSessionId) => {
         setSessionId(newSessionId);
@@ -311,10 +309,8 @@ function Quiz() {
 
     await aiApi.askQuestion(currentQuestion.id, sessionId, question, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => {
-          streamedContentRef.current = prev + content;
-          return prev + content;
-        });
+        streamedContentRef.current += content;
+        setCurrentAiContent(streamedContentRef.current);
       },
       onComplete: () => {
         setIsStreaming(false);

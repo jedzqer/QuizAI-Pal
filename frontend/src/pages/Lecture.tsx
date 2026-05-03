@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import { questionsApi, aiApi } from '../services/api';
+import type { StreamCallbacks } from '../services/api';
 import type { WrongQuestion, Question } from '../types';
 
 const LECTURE_STORAGE_KEY = 'lecture_state';
@@ -180,14 +181,12 @@ function Lecture() {
 
     streamedContentRef.current = '';
 
-    const callbacks = {
-      onChunk: (content) => {
-        setCurrentAiContent(prev => {
-          streamedContentRef.current = prev + content;
-          return prev + content;
-        });
+    const callbacks: StreamCallbacks = {
+      onChunk: (content: string) => {
+        streamedContentRef.current += content;
+        setCurrentAiContent(streamedContentRef.current);
       },
-      onComplete: (newSessionId) => {
+      onComplete: (newSessionId: string) => {
         setSessionId(newSessionId);
         setIsStreaming(false);
         setLectureLoading(false);
@@ -199,7 +198,7 @@ function Lecture() {
         }]);
         setCurrentAiContent('');
       },
-      onError: (error) => {
+      onError: (error: Error) => {
         console.error('Failed to start lecture:', error);
         // Save any partial content that was streamed before the error
         const partial = streamedContentRef.current;
@@ -249,10 +248,8 @@ function Lecture() {
 
     await aiApi.askQuestion(0, sessionId, question, {
       onChunk: (content) => {
-        setCurrentAiContent(prev => {
-          streamedContentRef.current = prev + content;
-          return prev + content;
-        });
+        streamedContentRef.current += content;
+        setCurrentAiContent(streamedContentRef.current);
       },
       onComplete: () => {
         setIsStreaming(false);
