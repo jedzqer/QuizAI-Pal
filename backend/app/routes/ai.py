@@ -6,7 +6,7 @@ import uuid
 
 from app.database import get_db
 from app.models import Question, WrongQuestion, AIConversation, User
-from app.models.schemas import AIExplainRequest, AIAskRequest, AILectureRequest, AIQuizRequest
+from app.models.schemas import AIExplainRequest, AIAskRequest, AILectureRequest, AIComprehensiveLectureRequest, AIQuizRequest
 from app.services.ai_service import ai_service
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -173,6 +173,45 @@ def start_lecture(request: AILectureRequest, db: Session = Depends(get_db)):
         generator, session_id, db,
         DEFAULT_USER_ID, 0,
         f"请讲解以下错题：{len(questions_data)}道题"
+    )
+
+
+@router.post("/lecture/comprehensive")
+def start_comprehensive_lecture(request: AIComprehensiveLectureRequest, db: Session = Depends(get_db)):
+    """Start a comprehensive AI lecture covering full knowledge points, like a classroom lecture."""
+    get_or_create_default_user(db)
+
+    # Get wrong questions
+    wrong_questions = db.query(WrongQuestion).filter(
+        WrongQuestion.user_id == DEFAULT_USER_ID,
+        WrongQuestion.id.in_(request.wrong_question_ids)
+    ).all()
+
+    if not wrong_questions:
+        raise HTTPException(status_code=404, detail="No wrong questions found")
+
+    # Prepare question data
+    questions_data = []
+    for wq in wrong_questions:
+        q = wq.question
+        options = json.loads(q.options) if q.options else {}
+        questions_data.append({
+            "question_text": q.question_text,
+            "options": options,
+            "correct_answer": q.correct_answer,
+            "user_answer": wq.user_answer
+        })
+
+    # Create session
+    session_id = str(uuid.uuid4())
+
+    # Generate comprehensive lecture stream
+    generator = ai_service.generate_comprehensive_lecture(questions_data, request.topic or "")
+
+    return stream_response(
+        generator, session_id, db,
+        DEFAULT_USER_ID, 0,
+        f"请综合讲解以下错题涉及的知识点：{len(questions_data)}道题"
     )
 
 

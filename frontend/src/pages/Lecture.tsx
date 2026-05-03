@@ -61,6 +61,7 @@ function Lecture() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [followUpQuestion, setFollowUpQuestion] = useState('');
   const [lectureStarted, setLectureStarted] = useState(saved?.lectureStarted || false);
+  const [lectureMode, setLectureMode] = useState<'question' | 'comprehensive'>('comprehensive');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   // Persist lecture state on change
@@ -179,7 +180,7 @@ function Lecture() {
 
     streamedContentRef.current = '';
 
-    await aiApi.startLecture(selectedIds, {
+    const callbacks = {
       onChunk: (content) => {
         setCurrentAiContent(prev => {
           streamedContentRef.current = prev + content;
@@ -215,7 +216,13 @@ function Lecture() {
         setCurrentAiContent('');
       },
       signal: controller.signal,
-    });
+    };
+
+    if (lectureMode === 'comprehensive') {
+      await aiApi.startComprehensiveLecture(selectedIds, '', callbacks);
+    } else {
+      await aiApi.startLecture(selectedIds, callbacks);
+    }
   };
 
   const handleFollowUp = async () => {
@@ -333,7 +340,64 @@ function Lecture() {
       {!lectureStarted && (
         <div className="card">
           <div className="card-title">选择错题进行讲解</div>
-          
+
+          {/* Lecture Mode Toggle */}
+          <div style={{
+            display: 'flex',
+            gap: '8px',
+            marginBottom: '20px',
+            padding: '4px',
+            backgroundColor: 'var(--color-parchment)',
+            borderRadius: '8px',
+          }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => setLectureMode('comprehensive')}
+              style={{
+                flex: 1,
+                backgroundColor: lectureMode === 'comprehensive' ? 'var(--color-burgundy)' : 'transparent',
+                color: lectureMode === 'comprehensive' ? '#fff' : 'var(--color-burgundy)',
+                border: 'none',
+                transition: 'all 0.2s',
+              }}
+            >
+              综合讲解
+            </button>
+            <button
+              className="btn btn-sm"
+              onClick={() => setLectureMode('question')}
+              style={{
+                flex: 1,
+                backgroundColor: lectureMode === 'question' ? 'var(--color-burgundy)' : 'transparent',
+                color: lectureMode === 'question' ? '#fff' : 'var(--color-burgundy)',
+                border: 'none',
+                transition: 'all 0.2s',
+              }}
+            >
+              逐题讲解
+            </button>
+          </div>
+          {lectureMode === 'comprehensive' && (
+            <p style={{
+              fontSize: '0.9em',
+              color: 'var(--color-text-secondary)',
+              marginBottom: '16px',
+              fontFamily: 'var(--font-body)',
+            }}>
+              综合讲解：AI将提炼错题中的知识点，像老师上课一样进行系统性讲解，不限于具体题目。
+            </p>
+          )}
+          {lectureMode === 'question' && (
+            <p style={{
+              fontSize: '0.9em',
+              color: 'var(--color-text-secondary)',
+              marginBottom: '16px',
+              fontFamily: 'var(--font-body)',
+            }}>
+              逐题讲解：AI将针对每道错题逐一分析错误原因、讲解知识点。
+            </p>
+          )}
+
           <div style={{ 
             display: 'flex', 
             justifyContent: 'space-between', 

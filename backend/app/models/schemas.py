@@ -77,6 +77,11 @@ class AILectureRequest(BaseModel):
     wrong_question_ids: List[int]
 
 
+class AIComprehensiveLectureRequest(BaseModel):
+    wrong_question_ids: List[int]
+    topic: Optional[str] = ""
+
+
 class AIQuizRequest(BaseModel):
     lecture_content: str
     question_ids: List[int]

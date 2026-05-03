@@ -168,6 +168,9 @@ export const aiApi = {
   startLecture: (wrongQuestionIds: number[], callbacks: StreamCallbacks) =>
     fetchStream('/api/ai/lecture', { wrong_question_ids: wrongQuestionIds }, callbacks),
 
+  startComprehensiveLecture: (wrongQuestionIds: number[], topic: string, callbacks: StreamCallbacks) =>
+    fetchStream('/api/ai/lecture/comprehensive', { wrong_question_ids: wrongQuestionIds, topic }, callbacks),
+
   generateQuiz: (lectureContent: string, questionIds: number[]) =>
     api.post('/api/ai/quiz', { lecture_content: lectureContent, question_ids: questionIds }),
 };

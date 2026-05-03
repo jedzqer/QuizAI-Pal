@@ -112,6 +112,50 @@ class AIService:
             if chunk.choices[0].delta.content is not None:
                 yield chunk.choices[0].delta.content
     
+    def generate_comprehensive_lecture(self, wrong_questions: List[Dict[str, Any]],
+                                       topic: str = "") -> Generator[str, None, None]:
+        """
+        Generate a comprehensive lecture covering complete knowledge points,
+        not limited to individual questions. Like a traditional classroom lecture.
+        """
+        # Build a summary of the wrong questions for context
+        questions_text = "\n".join([
+            f"题目{i+1}: {q['question_text']}\n正确答案: {q['correct_answer']}"
+            + (f"\n用户选择: {q['user_answer']}" if q.get('user_answer') else "")
+            for i, q in enumerate(wrong_questions)
+        ])
+
+        topic_hint = f"主题/类别：{topic}\n" if topic else ""
+
+        prompt = f"""{self.role}。用户在以下题目上多次出错，现在请进行一次综合讲解。
+
+{topic_hint}错题列表：
+{questions_text}
+
+请进行一次完整的综合讲解，像传统课堂教学一样：
+
+1. **知识体系梳理**：从这些错题中提炼出核心知识体系，构建完整的知识框架
+2. **重点知识深入讲解**：对每个关键知识点进行详细讲解，不要局限于具体题目，而是讲透背后的原理和概念
+3. **知识点之间的关联**：说明各个知识点之间的联系和区别
+4. **常见易错点总结**：基于错题分析，总结常见的错误类型和易混淆的概念
+5. **学习建议**：给出系统性的学习和记忆建议
+
+要求：
+- 像老师上课一样，讲授完整的知识体系，不要逐题分析
+- 使用专业但易懂的语言
+- 适当使用标题、列表等格式让内容更清晰
+- 重点放在"教会"用户，而不是"告诉"用户答案"""
+
+        stream = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            stream=True
+        )
+
+        for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+
     def select_quiz_questions(self, lecture_content: str,
                             available_questions: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
