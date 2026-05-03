@@ -32,10 +32,20 @@ def stream_response(generator, session_id: str, db: Session,
     full_content = []
     
     def event_stream():
-        for chunk in generator:
-            full_content.append(chunk)
-            data = json.dumps({"content": chunk, "done": False}, ensure_ascii=False)
-            yield f"data: {data}\n\n"
+        try:
+            for chunk in generator:
+                full_content.append(chunk)
+                data = json.dumps({"content": chunk, "done": False}, ensure_ascii=False)
+                yield f"data: {data}\n\n"
+        except Exception as e:
+            error_data = json.dumps(
+                {"content": "", "done": False, "error": f"AI stream failed: {str(e)}"},
+                ensure_ascii=False
+            )
+            yield f"data: {error_data}\n\n"
+            done_data = json.dumps({"content": "", "done": True, "session_id": session_id}, ensure_ascii=False)
+            yield f"data: {done_data}\n\n"
+            return
         
         # Stream completed, save to database
         complete_content = "".join(full_content)

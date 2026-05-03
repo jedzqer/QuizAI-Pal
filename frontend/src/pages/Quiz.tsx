@@ -95,6 +95,8 @@ function Quiz() {
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
   const streamedContentRef = useRef<string>('');
+  const userScrolledUpRef = useRef(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   const [currentQuestion, setCurrentQuestion] = useState<Question | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
@@ -109,6 +111,7 @@ function Quiz() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isMarkedConfusing, setIsMarkedConfusing] = useState(false);
   const [markLoading, setMarkLoading] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [currentNum, setCurrentNum] = useState(() => {
     const saved = localStorage.getItem('quiz_current_num');
     return saved ? parseInt(saved) : 1;
@@ -127,14 +130,29 @@ function Quiz() {
   }, [currentNum]);
 
   useEffect(() => {
-    const el = dialogEndRef.current;
-    if (!el) return;
-    const container = el.closest('.dialog-cards');
+    const container = scrollContainerRef.current;
     if (!container) return;
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    if (scrollHeight - scrollTop - clientHeight < 150) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const atBottom = scrollHeight - scrollTop - clientHeight <= 80;
+      userScrolledUpRef.current = !atBottom;
+      setShowScrollBtn(!atBottom && isStreaming);
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [showExplanation, isStreaming]);
+
+  useEffect(() => {
+    if (!isStreaming) setShowScrollBtn(false);
+  }, [isStreaming]);
+
+  useEffect(() => {
+    if (userScrolledUpRef.current) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
   }, [dialogMessages, currentAiContent]);
 
   // Scroll to navigation buttons after answering
@@ -184,6 +202,8 @@ function Quiz() {
     setSessionId(null);
     setIsMarkedConfusing(false);
     setMarkLoading(false);
+    userScrolledUpRef.current = false;
+    setShowScrollBtn(false);
     
     try {
       const response = await questionsApi.getQuestion(id);
@@ -205,6 +225,8 @@ function Quiz() {
     setSessionId(null);
     setIsMarkedConfusing(false);
     setMarkLoading(false);
+    userScrolledUpRef.current = false;
+    setShowScrollBtn(false);
     
     try {
       const response = await questionsApi.getQuestions(num, 1);
@@ -452,7 +474,7 @@ function Quiz() {
             {isStreaming && <span className="conversation-streaming">正在输出...</span>}
           </div>
           
-          <div className="dialog-cards">
+          <div className="dialog-cards" ref={scrollContainerRef}>
             {/* Historical Messages */}
             {dialogMessages.map((msg) => (
               <div key={msg.id} className={`dialog-card dialog-card-${msg.role}`}>
@@ -503,6 +525,21 @@ function Quiz() {
             
             <div ref={dialogEndRef} />
           </div>
+
+          {showScrollBtn && (
+            <button
+              className="btn btn-sm scroll-to-bottom-btn"
+              onClick={() => {
+                userScrolledUpRef.current = false;
+                const container = scrollContainerRef.current;
+                if (container) {
+                  container.scrollTop = container.scrollHeight;
+                }
+              }}
+            >
+              ↓ 回到底部
+            </button>
+          )}
           
           {/* Follow-up Input */}
           <div className="follow-up-section">

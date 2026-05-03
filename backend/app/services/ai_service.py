@@ -22,6 +22,19 @@ class AIService:
             api_key=api_key,
             base_url=api_base
         )
+
+    @staticmethod
+    def _iter_stream_content(stream) -> Generator[str, None, None]:
+        """Yield text content from streaming chunks, skipping empty frames."""
+        for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+
+            delta = getattr(choices[0], "delta", None)
+            content = getattr(delta, "content", None)
+            if content:
+                yield content
     
     def explain_answer(self, question: str, options: Dict[str, str], 
                       correct_answer: str, user_answer: str) -> Generator[str, None, None]:
@@ -52,9 +65,7 @@ class AIService:
             stream=True
         )
         
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+        yield from self._iter_stream_content(stream)
     
     def answer_followup(self, conversation_history: List[Dict[str, str]], 
                        user_question: str) -> Generator[str, None, None]:
@@ -75,9 +86,7 @@ class AIService:
             stream=True
         )
         
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+        yield from self._iter_stream_content(stream)
     
     def generate_lecture(self, wrong_questions: List[Dict[str, Any]]) -> Generator[str, None, None]:
         """
@@ -108,9 +117,7 @@ class AIService:
             stream=True
         )
         
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+        yield from self._iter_stream_content(stream)
     
     def generate_comprehensive_lecture(self, wrong_questions: List[Dict[str, Any]],
                                        topic: str = "") -> Generator[str, None, None]:
@@ -152,9 +159,7 @@ class AIService:
             stream=True
         )
 
-        for chunk in stream:
-            if chunk.choices[0].delta.content is not None:
-                yield chunk.choices[0].delta.content
+        yield from self._iter_stream_content(stream)
 
     def select_quiz_questions(self, lecture_content: str,
                             available_questions: List[Dict[str, Any]]) -> Dict[str, Any]:

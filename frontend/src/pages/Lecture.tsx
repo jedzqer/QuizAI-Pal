@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { questionsApi, aiApi } from '../services/api';
+import { questionsApi, aiApi, answersApi } from '../services/api';
 import type { StreamCallbacks } from '../services/api';
-import type { WrongQuestion, Question } from '../types';
+import type { WrongQuestion, Question, AnswerResponse } from '../types';
 
 const LECTURE_STORAGE_KEY = 'lecture_state';
 
@@ -12,6 +12,9 @@ interface LectureState {
   sessionId: string | null;
   selectedIds: number[];
   lectureStarted: boolean;
+  quizQuestions: Question[];
+  quizAnswers: Record<string, AnswerResponse>;
+  quizSelections: Record<string, string>;
 }
 
 function saveLectureState(state: LectureState) {
@@ -56,7 +59,19 @@ function Lecture() {
   );
   const [currentAiContent, setCurrentAiContent] = useState<string>('');
   const [sessionId, setSessionId] = useState<string | null>(saved?.sessionId || null);
-  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>(saved?.quizQuestions || []);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, AnswerResponse>>(() => {
+    if (!saved?.quizAnswers) return {};
+    return Object.fromEntries(
+      Object.entries(saved.quizAnswers).map(([questionId, answer]) => [Number(questionId), answer])
+    );
+  });
+  const [quizSelections, setQuizSelections] = useState<Record<number, string>>(() => {
+    if (!saved?.quizSelections) return {};
+    return Object.fromEntries(
+      Object.entries(saved.quizSelections).map(([questionId, selection]) => [Number(questionId), selection])
+    );
+  });
   const [loading, setLoading] = useState(false);
   const [lectureLoading, setLectureLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -64,6 +79,7 @@ function Lecture() {
   const [lectureStarted, setLectureStarted] = useState(saved?.lectureStarted || false);
   const [lectureMode, setLectureMode] = useState<'question' | 'comprehensive'>('comprehensive');
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [quizSubmittingId, setQuizSubmittingId] = useState<number | null>(null);
 
   // Persist lecture state on change
   useEffect(() => {
@@ -73,9 +89,16 @@ function Lecture() {
         sessionId,
         selectedIds,
         lectureStarted,
+        quizQuestions,
+        quizAnswers: Object.fromEntries(
+          Object.entries(quizAnswers).map(([questionId, answer]) => [questionId, answer])
+        ),
+        quizSelections: Object.fromEntries(
+          Object.entries(quizSelections).map(([questionId, selection]) => [questionId, selection])
+        ),
       });
     }
-  }, [dialogMessages, sessionId, selectedIds, lectureStarted]);
+  }, [dialogMessages, sessionId, selectedIds, lectureStarted, quizQuestions, quizAnswers, quizSelections]);
 
   // Abort stream on unmount, save partial content
   useEffect(() => {
@@ -125,9 +148,9 @@ function Lecture() {
   // Auto-scroll only when user hasn't scrolled up
   useEffect(() => {
     if (userScrolledUpRef.current) return;
-    const el = dialogEndRef.current;
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth' });
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
   }, [dialogMessages, currentAiContent]);
 
   const handleExitLecture = () => {
@@ -139,6 +162,9 @@ function Lecture() {
     setCurrentAiContent('');
     setSessionId(null);
     streamedContentRef.current = '';
+    setQuizQuestions([]);
+    setQuizAnswers({});
+    setQuizSelections({});
     localStorage.removeItem(LECTURE_STORAGE_KEY);
   };
 
@@ -178,6 +204,8 @@ function Lecture() {
     setCurrentAiContent('');
     setDialogMessages([]);
     setQuizQuestions([]);
+    setQuizAnswers({});
+    setQuizSelections({});
 
     streamedContentRef.current = '';
 
@@ -309,11 +337,34 @@ function Lecture() {
 
       const response = await aiApi.generateQuiz(lectureContent, questionIds);
       setQuizQuestions(response.data.questions);
+      setQuizAnswers({});
+      setQuizSelections({});
     } catch (error) {
       console.error('Failed to generate quiz:', error);
       alert('生成测试题失败，请稍后重试');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuizOptionSelect = (questionId: number, option: string) => {
+    if (quizAnswers[questionId] || quizSubmittingId === questionId) return;
+    setQuizSelections(prev => ({ ...prev, [questionId]: option }));
+  };
+
+  const handleQuizSubmit = async (questionId: number) => {
+    const selectedOption = quizSelections[questionId];
+    if (!selectedOption || quizAnswers[questionId] || quizSubmittingId === questionId) return;
+
+    setQuizSubmittingId(questionId);
+    try {
+      const response = await answersApi.submitAnswer(questionId, selectedOption);
+      setQuizAnswers(prev => ({ ...prev, [questionId]: response.data }));
+    } catch (error) {
+      console.error('Failed to submit AI quiz answer:', error);
+      alert('提交答案失败，请稍后重试');
+    } finally {
+      setQuizSubmittingId(null);
     }
   };
 
@@ -527,7 +578,10 @@ function Lecture() {
               className="btn btn-sm scroll-to-bottom-btn"
               onClick={() => {
                 userScrolledUpRef.current = false;
-                dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                const container = scrollContainerRef.current;
+                if (container) {
+                  container.scrollTop = container.scrollHeight;
+                }
               }}
             >
               ↓ 回到底部
@@ -573,22 +627,66 @@ function Lecture() {
       {/* Quiz Questions */}
       {quizQuestions.length > 0 && (
         <div className="card" style={{ marginTop: '24px' }}>
-          <div className="card-title">测试题目</div>
-          <div className="question-list">
-            {quizQuestions.map((q, index) => (
-              <div key={q.id} className="question-item">
-                <span className="question-item-num">{index + 1}</span>
-                <span className="question-item-text">
-                  {q.question_text.substring(0, 80)}...
-                </span>
-                <Link 
-                  to={`/quiz/${q.id}`} 
-                  className="btn btn-primary btn-sm"
-                >
-                  做题
-                </Link>
-              </div>
-            ))}
+          <div className="card-title">AI 选题练习</div>
+          <p style={{
+            marginBottom: '20px',
+            color: 'var(--color-text-secondary)',
+            fontFamily: 'var(--font-body)',
+          }}>
+            这些题目会停留在 AI 讲解页内完成，不会影响刷题页主进度；切换页面后也会保留。
+          </p>
+          <div style={{ display: 'grid', gap: '20px' }}>
+            {quizQuestions.map((q, index) => {
+              const answerResult = quizAnswers[q.id];
+              const selectedOption = quizSelections[q.id];
+
+              return (
+                <div key={q.id} className="card" style={{ margin: 0 }}>
+                  <div className="question-header">
+                    <span className="question-counter">练习 {index + 1}</span>
+                    <span className="question-num">编号 {q.num}</span>
+                  </div>
+                  <div className="question-text">{q.question_text}</div>
+                  <div className="options-list">
+                    {Object.entries(q.options).map(([key, value]) => (
+                      <button
+                        key={key}
+                        className={`option-btn ${
+                          answerResult && key === answerResult.correct_answer ? 'correct' : ''
+                        } ${
+                          answerResult && selectedOption === key && !answerResult.is_correct ? 'wrong' : ''
+                        } ${selectedOption === key && !answerResult ? 'selected' : ''}`}
+                        onClick={() => handleQuizOptionSelect(q.id, key)}
+                        disabled={!!answerResult || quizSubmittingId === q.id}
+                      >
+                        <span className="option-key">{key}.</span>
+                        <span>{value}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {answerResult && (
+                    <div className={`answer-result ${answerResult.is_correct ? 'correct' : 'wrong'}`}>
+                      <div className="answer-result-text">
+                        {answerResult.is_correct ? '✓ 回答正确！' : `✗ 回答错误！正确答案是：${answerResult.correct_answer}`}
+                      </div>
+                    </div>
+                  )}
+
+                  {!answerResult && (
+                    <div className="action-buttons">
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => handleQuizSubmit(q.id)}
+                        disabled={!selectedOption || quizSubmittingId === q.id}
+                      >
+                        {quizSubmittingId === q.id ? '提交中...' : '提交答案'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
